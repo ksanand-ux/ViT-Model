@@ -1,4 +1,5 @@
 import io
+import json
 
 import torch
 from flask import Flask, jsonify, request
@@ -11,6 +12,10 @@ app = Flask(__name__)
 # Load pre-trained ViT model and feature extractor
 model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+
+# Load ImageNet class labels
+with open("imagenet_classes.json", "r") as f:
+    class_labels = json.load(f)
 
 @app.route('/')
 def home():
@@ -35,7 +40,13 @@ def predict():
         logits = outputs.logits
         predicted_class_idx = logits.argmax(-1).item()
 
-        return jsonify({"predicted_class_index": predicted_class_idx})
+        # Get the label for the predicted class
+        predicted_label = class_labels[predicted_class_idx]
+
+        return jsonify({
+            "predicted_class_index": predicted_class_idx,
+            "predicted_label": predicted_label
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
