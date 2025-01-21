@@ -14,11 +14,13 @@ model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
 
 # Load ImageNet class labels
-with open("imagenet_classes.json", "r") as f:
-    class_labels = json.load(f)
-
-# Debug: Print the number of class labels loaded
-print(f"Class Labels Loaded: {len(class_labels)} labels")  # Add this debug line here
+try:
+    with open("imagenet_classes.json", "r") as f:
+        class_labels = json.load(f)
+    print(f"Class Labels Loaded: {len(class_labels)} labels")
+except Exception as e:
+    print(f"Error loading class labels: {e}")
+    class_labels = []
 
 @app.route('/')
 def home():
@@ -41,20 +43,24 @@ def predict():
         # Perform prediction
         outputs = model(**inputs)
         logits = outputs.logits
+        print(f"Logits: {logits}")  # Debug: Print logits
         predicted_class_idx = logits.argmax(-1).item()
+        print(f"Predicted Index: {predicted_class_idx}")  # Debug: Print predicted index
 
-        # Get the label for the predicted class
-        predicted_label = class_labels[predicted_class_idx]
+        # Map predicted index to label
+        if predicted_class_idx < len(class_labels):
+            predicted_label = class_labels[predicted_class_idx]
+        else:
+            predicted_label = "Unknown"
+        print(f"Predicted Label: {predicted_label}")  # Debug: Print predicted label
 
-        # Debug: Print predicted index and label
-        print(f"Predicted Index: {predicted_class_idx}")
-        print(f"Predicted Label: {predicted_label}")
-
-        return jsonify({
+        # Return prediction
+        return {
             "predicted_class_index": predicted_class_idx,
             "predicted_label": predicted_label
-        })
+        }
     except Exception as e:
+        print(f"Error during prediction: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Run the Flask app
