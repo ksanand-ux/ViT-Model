@@ -17,6 +17,9 @@ feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16
 with open("imagenet_classes.json", "r") as f:
     class_labels = json.load(f)
 
+# Debug: Print the number of class labels loaded
+print(f"Class Labels Loaded: {len(class_labels)} labels")  # Add this debug line here
+
 @app.route('/')
 def home():
     return "Welcome to the Vision Transformer (ViT) Model API!"
@@ -43,6 +46,10 @@ def predict():
         # Get the label for the predicted class
         predicted_label = class_labels[predicted_class_idx]
 
+        # Debug: Print predicted index and label
+        print(f"Predicted Index: {predicted_class_idx}")
+        print(f"Predicted Label: {predicted_label}")
+
         return jsonify({
             "predicted_class_index": predicted_class_idx,
             "predicted_label": predicted_label
@@ -53,6 +60,3 @@ def predict():
 # Run the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
-print(f"Class Labels Loaded: {len(class_labels)} labels")
-
