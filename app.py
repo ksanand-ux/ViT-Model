@@ -7,7 +7,11 @@ def predict():
 
         # Read the uploaded file
         file = request.files['file']
-        image = Image.open(io.BytesIO(file.read()))
+        try:
+            image = Image.open(io.BytesIO(file.read()))
+        except Exception as e:
+            print(f"Error loading image: {e}")
+            return jsonify({"error": "Invalid image file"}), 400
 
         # Preprocess the image
         inputs = feature_extractor(images=image, return_tensors="pt")
@@ -20,7 +24,7 @@ def predict():
         print(f"Predicted Index: {predicted_class_idx}")  # Debug: Print predicted index
 
         # Map predicted index to label
-        if predicted_class_idx < len(class_labels):
+        if 0 <= predicted_class_idx < len(class_labels):
             predicted_label = class_labels[predicted_class_idx]
         else:
             predicted_label = "Unknown"
@@ -32,7 +36,7 @@ def predict():
             "predicted_label": predicted_label
         }
         print(f"Response: {response}")  # Debug: Print response before returning
-        return response
+        return jsonify(response)  # Ensure JSON formatting
     except Exception as e:
         print(f"Error during prediction: {e}")
         return jsonify({"error": str(e)}), 500
