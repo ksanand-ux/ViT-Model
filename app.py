@@ -14,9 +14,14 @@ model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
 
 # Load class labels
-with open("imagenet_classes.json", "r") as f:
-    class_labels = json.load(f)
-print(f"Class Labels Loaded: {len(class_labels)} labels")
+try:
+    with open("imagenet_classes.json", "r") as f:
+        class_labels = json.load(f)
+    print(f"Class Labels Loaded: {len(class_labels)} labels")
+    print(f"First 5 Class Labels: {class_labels[:5]}")
+except Exception as e:
+    print(f"Error loading class labels: {e}")
+    class_labels = []
 
 # Define routes
 @app.route('/')
@@ -26,28 +31,33 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
+        print("Predict endpoint hit.")  # Confirm endpoint hit
+
         # Ensure an image file is in the request
         if 'file' not in request.files:
+            print("No file provided in the request.")
             return jsonify({"error": "No file provided"}), 400
 
         # Read the uploaded file
         file = request.files['file']
+        print(f"File received: {file.filename}")  # Debug file name
         image = Image.open(io.BytesIO(file.read()))
         print(f"Image Loaded: {image.format}, {image.size}, {image.mode}")  # Debug: Image info
 
         # Preprocess the image
+        print("Before preprocessing...")
         inputs = feature_extractor(images=image, return_tensors="pt")
         print(f"Inputs Shape: {inputs['pixel_values'].shape}")  # Debug: Input tensor shape
-        
+
         # Perform prediction
+        print("Before model prediction...")
         outputs = model(**inputs)
         logits = outputs.logits
         predicted_class_idx = logits.argmax(-1).item()
-        
-        # Debug prints
         print(f"Logits Shape: {logits.shape}")
         print(f"Predicted Index: {predicted_class_idx}")
-        
+
+        # Map predicted index to label
         predicted_label = class_labels[predicted_class_idx] if predicted_class_idx < len(class_labels) else "Unknown"
         print(f"Predicted Label: {predicted_label}")
 
@@ -66,5 +76,6 @@ def predict():
 # Run the Flask app
 if __name__ == '__main__':
     import os
+    print(f"Running app from: {__file__}")
     print(f"Current Working Directory: {os.getcwd()}")  # Debug: Working directory
     app.run(host='0.0.0.0', port=5000, debug=True)
