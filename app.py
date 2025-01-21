@@ -31,7 +31,7 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        print("Predict endpoint hit.")  # Confirm endpoint hit
+        print("Predict endpoint hit.")  # Confirm endpoint is accessed
 
         # Ensure an image file is in the request
         if 'file' not in request.files:
@@ -40,17 +40,17 @@ def predict():
 
         # Read the uploaded file
         file = request.files['file']
-        print(f"File received: {file.filename}")  # Debug file name
+        print(f"File Received: {file.filename}")  # Debug file name
         image = Image.open(io.BytesIO(file.read()))
         print(f"Image Loaded: {image.format}, {image.size}, {image.mode}")  # Debug: Image info
 
         # Preprocess the image
-        print("Before preprocessing...")
+        print("Step 1: Preprocessing image...")
         inputs = feature_extractor(images=image, return_tensors="pt")
         print(f"Inputs Shape: {inputs['pixel_values'].shape}")  # Debug: Input tensor shape
 
         # Perform prediction
-        print("Before model prediction...")
+        print("Step 2: Performing model prediction...")
         outputs = model(**inputs)
         logits = outputs.logits
         predicted_class_idx = logits.argmax(-1).item()
@@ -58,6 +58,7 @@ def predict():
         print(f"Predicted Index: {predicted_class_idx}")
 
         # Map predicted index to label
+        print("Step 3: Mapping predicted index to label...")
         predicted_label = class_labels[predicted_class_idx] if predicted_class_idx < len(class_labels) else "Unknown"
         print(f"Predicted Label: {predicted_label}")
 
@@ -66,11 +67,12 @@ def predict():
             "predicted_class_index": predicted_class_idx,
             "predicted_label": predicted_label
         }
+        print("Step 4: Preparing response...")
         print(f"Response: {response}")
 
         return jsonify(response)
     except Exception as e:
-        print(f"Error during prediction: {e}")
+        print(f"Error in predict route: {e}")
         return jsonify({"error": str(e)}), 500
 
 # Run the Flask app
