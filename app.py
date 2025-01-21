@@ -1,31 +1,3 @@
-import io
-import json
-
-import torch
-from flask import Flask, jsonify, request
-from PIL import Image
-from transformers import ViTFeatureExtractor, ViTForImageClassification
-
-# Initialize Flask app
-app = Flask(__name__)
-
-# Load pre-trained ViT model and feature extractor
-model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
-feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-
-# Load ImageNet class labels
-try:
-    with open("imagenet_classes.json", "r") as f:
-        class_labels = json.load(f)
-    print(f"Class Labels Loaded: {len(class_labels)} labels")
-except Exception as e:
-    print(f"Error loading class labels: {e}")
-    class_labels = []
-
-@app.route('/')
-def home():
-    return "Welcome to the Vision Transformer (ViT) Model API!"
-
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
@@ -55,14 +27,12 @@ def predict():
         print(f"Predicted Label: {predicted_label}")  # Debug: Print predicted label
 
         # Return prediction
-        return {
+        response = {
             "predicted_class_index": predicted_class_idx,
             "predicted_label": predicted_label
         }
+        print(f"Response: {response}")  # Debug: Print response before returning
+        return response
     except Exception as e:
         print(f"Error during prediction: {e}")
         return jsonify({"error": str(e)}), 500
-
-# Run the Flask app
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
