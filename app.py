@@ -57,4 +57,35 @@ def predict():
             predicted_class_idx = logits.argmax(-1).item()
             print(f"Logits Shape: {logits.shape}")
             print(f"Predicted Index: {predicted_class_idx}")
-      
+        except Exception as e:
+            print(f"Error during model prediction: {e}")
+            return jsonify({"error": f"Model prediction failed: {str(e)}"}), 500
+
+        # Map predicted index to label
+        print("Debug 3: Mapping predicted index to label...")
+        try:
+            predicted_label = class_labels[predicted_class_idx] if predicted_class_idx < len(class_labels) else "Unknown"
+            print(f"Predicted Label: {predicted_label}")
+        except Exception as e:
+            print(f"Error mapping predicted index to label: {e}")
+            predicted_label = "Unknown"
+
+        # Prepare response
+        response = {
+            "predicted_class_index": predicted_class_idx,
+            "predicted_label": predicted_label
+        }
+        print("Debug 4: Preparing response...")
+        print(f"Response to be returned: {response}")
+
+        return jsonify(response)
+    except Exception as e:
+        print(f"Error in predict route: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Run the Flask app
+if __name__ == '__main__':
+    import os
+    print(f"Running app from: {__file__}")
+    print(f"Current Working Directory: {os.getcwd()}")  # Debug: Working directory
+    app.run(host='0.0.0.0', port=5000, debug=True)
