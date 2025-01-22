@@ -1,102 +1,87 @@
 import io
-import json
-import sys
 
 import torch
 from flask import Flask, jsonify, request
 from PIL import Image
-from transformers import ViTFeatureExtractor, ViTForImageClassification
-
-
-# Debug function to flush output
-def debug_print(message):
-    print(message)
-    sys.stdout.flush()
+from torchvision import transforms
+from torchvision.models import vit_b_16
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Load model and feature extractor
-model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
-feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+# Device configuration
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Load class labels
-try:
-    with open("imagenet_classes.json", "r") as f:
-        class_labels = json.load(f)
-    debug_print(f"Class Labels Loaded: {len(class_labels)} labels")
-    debug_print(f"First 5 Class Labels: {class_labels[:5]}")
-except Exception as e:
-    debug_print(f"Error loading class labels: {e}")
-    class_labels = []
+# CIFAR-10 class labels
+class_labels = [
+    'airplane', 'automobile', 'bird', 'cat', 'deer',
+    'dog', 'frog', 'horse', 'ship', 'truck'
+]
 
-# Define routes
+# Load the trained model
+print("=== Loading Trained Model ===")
+vit_model = vit_b_16(weights=None)  # Do not load ImageNet pretrained weights
+vit_model.heads = torch.nn.Linear(vit_model.heads[0].in_features, len(class_labels))  # Adjust for 10 classes
+vit_model.load_state_dict(torch.load("vit_cifar10.pth", map_location=device))  # Load trained weights
+vit_model = vit_model.to(device)
+vit_model.eval()
+print("=== Model Loaded Successfully ===")
+
+# Image preprocessing transforms (same as used during training)
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
+
 @app.route('/')
 def home():
-    return "Welcome to the Vision Transformer (ViT) API!"
+    return "Welcome to the Vision Transformer CIFAR-10 Model API!"
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    debug_print("=== Predict endpoint accessed ===")  # Debug 1
-
-    # Ensure an image file is in the request
-    if 'file' not in request.files:
-        debug_print("No file provided in the request.")  # Debug 2
-        return jsonify({"error": "No file provided"}), 400
-    debug_print("File received.")  # Debug 3
-
-    # Process the uploaded file
     try:
+        # Debug: Confirm route is hit
+        print("=== /predict endpoint accessed ===")
+
+        # Ensure an image file is in the request
+        if 'file' not in request.files:
+            print("Error: No file provided")
+            return jsonify({"error": "No file provided"}), 400
+
+        # Read the uploaded image
         file = request.files['file']
-        image = Image.open(io.BytesIO(file.read()))
-        debug_print(f"Image processed: {image.format}, {image.size}, {image.mode}")  # Debug 4
-    except Exception as e:
-        debug_print(f"Error processing image: {e}")
-        return jsonify({"error": "Invalid image"}), 400
+        image = Image.open(io.BytesIO(file.read())).convert("RGB")
 
-    # Preprocess the image
-    try:
-        debug_print("Debug 5: Preprocessing image...")
-        inputs = feature_extractor(images=image, return_tensors="pt")
-        debug_print(f"Inputs Shape: {inputs['pixel_values'].shape}")  # Debug 6
-    except Exception as e:
-        debug_print(f"Error preprocessing image: {e}")
-        return jsonify({"error": "Image preprocessing failed"}), 500
+        # Preprocess the image
+        input_tensor = transform(image).unsqueeze(0).to(device)
+        print("=== Image Preprocessed ===")
 
-    # Perform prediction
-    try:
-        debug_print("Debug 7: Performing model prediction...")
-        outputs = model(**inputs)
-        logits = outputs.logits
-        predicted_class_idx = logits.argmax(-1).item()
-        debug_print(f"Logits Shape: {logits.shape}")
-        debug_print(f"Predicted Index: {predicted_class_idx}")
-    except Exception as e:
-        debug_print(f"Error during model prediction: {e}")
-        return jsonify({"error": "Model prediction failed"}), 500
+        # Perform prediction
+        with torch.no_grad():
+            outputs = vit_model(input_tensor)
+            predicted_class_idx = outputs.argmax(dim=1).item()
+        print(f"Predicted Index: {predicted_class_idx}")
 
-    # Map predicted index to label
-    try:
-        debug_print("Debug 8: Mapping predicted index to label...")
-        predicted_label = class_labels[predicted_class_idx] if predicted_class_idx < len(class_labels) else "Unknown"
-        debug_print(f"Predicted Label: {predicted_label}")
-    except Exception as e:
-        debug_print(f"Error mapping predicted index to label: {e}")
-        predicted_label = "Unknown"
+        # Map index to class label
+        predicted_label = class_labels[predicted_class_idx]
+        print(f"Predicted Label: {predicted_label}")
 
-    # Prepare and return response
-    response = {
-        "predicted_class_index": predicted_class_idx,
-        "predicted_label": predicted_label
-    }
-    debug_print("Debug 9: Preparing response...")
-    debug_print(f"Response to be returned: {response}")
-    return jsonify(response)
+        # Return response
+        response = {
+            "predicted_class_index": predicted_class_idx,
+            "predicted_label": predicted_label
+        }
+        print(f"Response: {response}")
+        return jsonify(response)
+
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # Run the Flask app
 if __name__ == '__main__':
     import os
-    debug_print("=== Updated app.py Loaded ===")
-    debug_print(f"Running app from: {__file__}")
-    debug_print(f"Current Working Directory: {os.getcwd()}")
+    print(f"Running app from: {os.path.abspath(__file__)}")
+    print(f"Current Working Directory: {os.getcwd()}")
     app.run(host='0.0.0.0', port=5000, debug=True)
