@@ -29,7 +29,7 @@ try:
     vit_model.load_state_dict(torch.load("vit_cifar10.pth", map_location=device))  # Load trained weights
     vit_model = vit_model.to(device)
     vit_model.eval()
-    print("=== Model Loaded Successfully ===")
+    print(f"=== Model Loaded Successfully ===\nModel Output Layer: {vit_model.heads}")
 except Exception as e:
     print(f"Error loading model: {e}")
 
@@ -56,18 +56,20 @@ def predict():
 
         # Read and preprocess the uploaded image
         file = request.files['file']
+        print(f"File Received: {file.filename}")
         image = Image.open(io.BytesIO(file.read())).convert("RGB")
         input_tensor = transform(image).unsqueeze(0).to(device)
-        print("=== Image Preprocessed ===")
+        print(f"Input Tensor Shape: {input_tensor.shape}")
 
         # Perform prediction
         with torch.no_grad():
             outputs = vit_model(input_tensor)
+            print(f"Model Outputs: {outputs}")
             predicted_class_idx = outputs.argmax(dim=1).item()
+            print(f"Predicted Class Index: {predicted_class_idx}")
 
         # Get the predicted label
         predicted_label = class_labels[predicted_class_idx]
-        print(f"Predicted Index: {predicted_class_idx}")
         print(f"Predicted Label: {predicted_label}")
 
         # Return the prediction response
