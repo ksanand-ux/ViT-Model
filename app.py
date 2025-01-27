@@ -7,7 +7,7 @@ from torchvision import transforms
 from torchvision.models import vit_b_16
 
 # Initialize Flask app
-app = Flask(__name__)  # Define the app BEFORE using it
+app = Flask(__name__)
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -29,7 +29,8 @@ try:
     vit_model.load_state_dict(torch.load("vit_cifar10.pth", map_location=device))  # Load trained weights
     vit_model = vit_model.to(device)
     vit_model.eval()
-    print("=== Model Loaded Successfully ===")
+    print(f"=== Model Loaded Successfully ===")
+    print(f"Model Output Layer: {vit_model.heads}")  # Debug: Output layer
 except Exception as e:
     print(f"Error loading model: {e}")
 
@@ -40,12 +41,10 @@ transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
-# Home route
 @app.route('/')
 def home():
     return "Welcome to the Vision Transformer CIFAR-10 Model API!"
 
-# Prediction route
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
