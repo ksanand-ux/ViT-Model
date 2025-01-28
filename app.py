@@ -14,14 +14,19 @@ classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "hors
 print("=== Loading Trained Model ===")
 try:
     # Initialize the ViT architecture
-    model = vit_b_16(pretrained=False, num_classes=len(classes))
+    model = vit_b_16(pretrained=False)
 
-    # Fix the mismatch by redefining the model's head
-    # Your state_dict expects "heads.weight" and "heads.bias"
-    model.heads = torch.nn.Linear(model.heads.in_features, len(classes))
+    # Replace the final classification head
+    num_features = model.heads[-1].in_features  # Access in_features of the last layer
+    model.heads[-1] = torch.nn.Linear(num_features, len(classes))  # Update the number of classes
 
     # Load the state_dict
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+
+    # Handle any prefix issues in state_dict keys
+    if any(key.startswith("module.") for key in state_dict.keys()):
+        print("Stripping 'module.' prefix from state_dict keys...")
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 
     # Load the state_dict into the adjusted model
     model.load_state_dict(state_dict)
