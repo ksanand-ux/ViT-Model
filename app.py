@@ -14,22 +14,22 @@ classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "hors
 print("=== Loading Trained Model ===")
 try:
     # Initialize the ViT architecture
-    model = vit_b_16(pretrained=False)
-
-    # Replace the final classification head
-    num_features = model.heads[-1].in_features  # Access in_features of the last layer
-    model.heads[-1] = torch.nn.Linear(num_features, len(classes))  # Update the number of classes
+    model = vit_b_16(pretrained=False, num_classes=len(classes))
 
     # Load the state_dict
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
 
-    # Handle any prefix issues in state_dict keys
-    if any(key.startswith("module.") for key in state_dict.keys()):
-        print("Stripping 'module.' prefix from state_dict keys...")
-        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    # Rename keys in state_dict to match the initialized model
+    renamed_state_dict = {}
+    for key in state_dict.keys():
+        if key.startswith("heads."):
+            renamed_key = key.replace("heads.", "heads.head.")  # Rename to match `vit_b_16`
+            renamed_state_dict[renamed_key] = state_dict[key]
+        else:
+            renamed_state_dict[key] = state_dict[key]
 
-    # Load the state_dict into the adjusted model
-    model.load_state_dict(state_dict)
+    # Load the renamed state_dict
+    model.load_state_dict(renamed_state_dict)
     model.eval()  # Set model to evaluation mode
     print("✅ Model loaded successfully!")
 
