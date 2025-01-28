@@ -2,30 +2,40 @@ import torch
 from flask import Flask, request
 from PIL import Image
 from torchvision import transforms
+from torchvision.models import \
+    vit_b_16  # Replace with your actual model if needed
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Define model and class labels
+# Define model path and class labels
 model_path = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model/vit_cifar10.pth"
-classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]  # Update this if needed
+classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]  # Update as needed
 
 # Load the model
-print("Loading the model...")
+print("=== Loading Trained Model ===")
 try:
     model = torch.load(model_path, map_location=torch.device('cpu'))
+
     if isinstance(model, torch.nn.Module):
-        model.eval()  # If it’s a full model
-    else:
-        from torchvision.models import \
-            vit_b_16  # Example architecture, update if needed
+        # If it's a full model, directly set to eval mode
+        print("Detected full model object. Setting to evaluation mode.")
+        model.eval()
+    elif isinstance(model, dict):
+        # If it's a state_dict, load it into the architecture
+        print("Detected state_dict. Loading into model architecture...")
         model = vit_b_16(pretrained=False, num_classes=len(classes))  # Adjust num_classes
         model.load_state_dict(model)
-        model.eval()  # Set to evaluation mode
+        model.eval()
+    else:
+        raise ValueError("Unrecognized model format. Ensure it's either a full model or a state_dict.")
+
     print("✅ Model loaded successfully!")
+
 except Exception as e:
     print(f"❌ Error loading model: {e}")
-    model = None
+    model = None  # Set model to None to handle issues gracefully
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
