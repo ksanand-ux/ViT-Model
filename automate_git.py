@@ -3,7 +3,7 @@ import subprocess
 import gdown
 
 # Google Drive file ID
-file_id = "<file_id>"
+file_id = "1Am3LzfitGjDZ3MKCA9yjf1e7-j5_MAd3"
 url = f"https://drive.google.com/uc?id={file_id}"
 output_path = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model/vit_cifar10.pth"
 
