@@ -31,7 +31,7 @@ try:
     # Load the renamed state_dict
     model.load_state_dict(renamed_state_dict)
     model.eval()  # Set model to evaluation mode
-    print("✅ Model loaded successfully!")
+    print("Model loaded successfully!")
 
 except Exception as e:
     print(f"Error loading model: {e}")  # Debug message for terminal
