@@ -23,7 +23,7 @@ print("=== Flask App Initialized ===")
 
 # Load the trained model
 try:
-    print("=== Loading Trained Model ===")
+    print("=== Loading Trained Model from vit_cifar10.pth ===")
     vit_model = vit_b_16(weights=None)  # Do not load ImageNet pretrained weights
     vit_model.heads = torch.nn.Linear(vit_model.heads[0].in_features, len(class_labels))  # Adjust for 10 classes
     vit_model.load_state_dict(torch.load("vit_cifar10.pth", map_location=device))  # Load trained weights
