@@ -1,13 +1,24 @@
-import os
-import subprocess  # Allows us to run Git commands from Python
+import subprocess
 
-# Path to the GitHub repo (and the location where the model is downloaded)
-repo_dir = r"C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model"
+import gdown
 
-# Step 1: Change the working directory to the repo
-os.chdir(repo_dir)
+# Google Drive file ID
+file_id = "<file_id>"
+url = f"https://drive.google.com/uc?id={file_id}"
+output_path = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model/vit_cifar10.pth"
 
-# Step 2: Run Git commands to stage, commit, and push the model
-subprocess.run(["git", "add", "vit_cifar10.pth"])  # Stage the updated model
-subprocess.run(["git", "commit", "-m", "Updated vit_cifar10.pth with the latest trained model"])  # Commit changes
-subprocess.run(["git", "push", "origin", "main"])  # Push to GitHub
+# Download the model
+print("Downloading model from Google Drive...")
+gdown.download(url, output_path, quiet=False)
+print(f"Model downloaded to: {output_path}")
+
+# Update GitHub repository
+repo_dir = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model"
+commit_message = "Updated vit_cifar10.pth with latest model"
+
+print("Updating GitHub repository...")
+subprocess.run(["git", "-C", repo_dir, "add", "vit_cifar10.pth"])
+subprocess.run(["git", "-C", repo_dir, "commit", "-m", commit_message])
+subprocess.run(["git", "-C", repo_dir, "push"])
+
+print("Model pushed to GitHub successfully!")
