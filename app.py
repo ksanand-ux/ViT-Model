@@ -16,22 +16,21 @@ try:
     # Initialize the ViT architecture
     model = vit_b_16(pretrained=False, num_classes=len(classes))
 
+    # Fix the mismatch by redefining the model's head
+    # Your state_dict expects "heads.weight" and "heads.bias"
+    model.heads = torch.nn.Linear(model.heads.in_features, len(classes))
+
     # Load the state_dict
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
 
-    # Handle any prefix issues in state_dict keys
-    if any(key.startswith("module.") for key in state_dict.keys()):
-        print("Stripping 'module.' prefix from state_dict keys...")
-        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-
-    # Load the state_dict into the model
+    # Load the state_dict into the adjusted model
     model.load_state_dict(state_dict)
     model.eval()  # Set model to evaluation mode
     print("✅ Model loaded successfully!")
 
 except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+    print(f"Error loading model: {e}")  # Debug message for terminal
+    model = None  # Prevent predictions if model loading fails
 
 
 @app.route('/predict', methods=['POST'])
