@@ -1,92 +1,66 @@
-import io
-
 import torch
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from PIL import Image
 from torchvision import transforms
-from torchvision.models import vit_b_16
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Define model and class labels
+model_path = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model/vit_cifar10.pth"
+classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]  # Update this if needed
 
-# CIFAR-10 class labels
-class_labels = [
-    'airplane', 'automobile', 'bird', 'cat', 'deer',
-    'dog', 'frog', 'horse', 'ship', 'truck'
-]
-
-# Debugging indicator
-print("=== Flask App Initialized ===")
-
-# Load the trained model
+# Load the model
+print("Loading the model...")
 try:
-    print("=== Loading Trained Model from vit_cifar10.pth ===")
-    vit_model = vit_b_16(weights=None)  # Do not load ImageNet pretrained weights
-    vit_model.heads = torch.nn.Linear(vit_model.heads[0].in_features, len(class_labels))  # Adjust for 10 classes
-    vit_model.load_state_dict(torch.load("vit_cifar10.pth", map_location=device))  # Load trained weights
-    vit_model = vit_model.to(device)
-    vit_model.eval()
-    print(f"=== Model Loaded Successfully ===")
-    print(f"Model Output Layer: {vit_model.heads}")  # Debug: Output layer
+    model = torch.load(model_path, map_location=torch.device('cpu'))
+    if isinstance(model, torch.nn.Module):
+        model.eval()  # If it’s a full model
+    else:
+        from torchvision.models import \
+            vit_b_16  # Example architecture, update if needed
+        model = vit_b_16(pretrained=False, num_classes=len(classes))  # Adjust num_classes
+        model.load_state_dict(model)
+        model.eval()  # Set to evaluation mode
+    print("✅ Model loaded successfully!")
 except Exception as e:
-    print(f"Error loading model: {e}")
-
-# Image preprocessing transforms (same as used during training)
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
-
-@app.route('/')
-def home():
-    return "Welcome to the Vision Transformer CIFAR-10 Model API!"
+    print(f"❌ Error loading model: {e}")
+    model = None
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None:
+        return {"error": "Model could not be loaded. Please check your model file."}, 500
+
     try:
-        print("=== /predict endpoint accessed ===")
-
-        # Check if the file is included in the request
-        if 'file' not in request.files:
-            print("Error: No file provided")
-            return jsonify({"error": "No file provided"}), 400
-
-        # Read and preprocess the uploaded image
+        # Step 1: Receive and process the image
         file = request.files['file']
-        image = Image.open(io.BytesIO(file.read())).convert("RGB")
-        input_tensor = transform(image).unsqueeze(0).to(device)
-        print("=== Image Preprocessed ===")
+        img = Image.open(file).convert('RGB')
+        print("Image received and converted to RGB.")  # Debug
 
-        # Perform prediction
+        preprocess = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        input_tensor = preprocess(img).unsqueeze(0)
+
+        # Step 2: Get predictions
         with torch.no_grad():
-            outputs = vit_model(input_tensor)
-            predicted_class_idx = outputs.argmax(dim=1).item()
+            output = model(input_tensor)
+        predicted_class_index = output.argmax().item()
+        print(f"Predicted class index: {predicted_class_index}")  # Debug
 
-        # Get the predicted label
-        predicted_label = class_labels[predicted_class_idx]
-        print(f"Predicted Index: {predicted_class_idx}")
-        print(f"Predicted Label: {predicted_label}")
-
-        # Return the prediction response
-        response = {
-            "predicted_class_index": predicted_class_idx,
-            "predicted_label": predicted_label
+        # Step 3: Return the result
+        return {
+            "predicted_class_index": predicted_class_index,
+            "predicted_label": classes[predicted_class_index]
         }
-        print(f"Response: {response}")
-        return jsonify(response)
 
     except Exception as e:
-        print(f"Error during prediction: {e}")
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ Error during prediction: {e}")
+        return {"error": str(e)}, 500
 
-# Run the Flask app
+
 if __name__ == '__main__':
-    import os
-    print("=== Starting Flask App ===")
-    print(f"Running app from: {os.path.abspath(__file__)}")
-    print(f"Current Working Directory: {os.getcwd()}")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
