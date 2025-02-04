@@ -7,7 +7,7 @@ from torchvision.models import vit_b_16
 app = Flask(__name__)
 
 # Define model path and class labels
-model_path = "C:/Users/hello/OneDrive/Documents/Python/ViT Model/ViT-Model/vit_cifar10.pth"
+model_path = "vit_cifar10.pth"  # Use a relative path for Linux/EC2
 classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
 
 # Load the model
@@ -23,7 +23,7 @@ try:
     renamed_state_dict = {}
     for key in state_dict.keys():
         if key.startswith("heads."):
-            renamed_key = key.replace("heads.", "heads.head.")  # Rename to match `vit_b_16`
+            renamed_key = key.replace("heads.", "heads.head.")  # Rename to match vit_b_16
             renamed_state_dict[renamed_key] = state_dict[key]
         else:
             renamed_state_dict[key] = state_dict[key]
@@ -34,7 +34,7 @@ try:
     print("Model loaded successfully!")
 
 except Exception as e:
-    print(f"Error loading model: {e}")  # Debug message for terminal
+    print(f"Error loading model: {e}")
     model = None  # Prevent predictions if model loading fails
 
 
@@ -68,4 +68,4 @@ def predict():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)  # Production-ready
