@@ -1,3 +1,5 @@
+import os
+
 import torch
 from flask import Flask, request
 from PIL import Image
@@ -7,35 +9,32 @@ from torchvision.models import vit_b_16
 app = Flask(__name__)
 
 # Define model path and class labels
-model_path = "vit_cifar10.pth"  # Use a relative path for Linux/EC2
+model_path = os.path.join(os.path.dirname(__file__), "vit_cifar10.pth")
 classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
 
 # Load the model
 print("=== Loading Trained Model ===")
 try:
-    # Initialize the ViT architecture
     model = vit_b_16(pretrained=False, num_classes=len(classes))
 
     # Load the state_dict
     state_dict = torch.load(model_path, map_location=torch.device('cpu'))
 
     # Rename keys in state_dict to match the initialized model
-    renamed_state_dict = {}
-    for key in state_dict.keys():
-        if key.startswith("heads."):
-            renamed_key = key.replace("heads.", "heads.head.")  # Rename to match vit_b_16
-            renamed_state_dict[renamed_key] = state_dict[key]
-        else:
-            renamed_state_dict[key] = state_dict[key]
+    renamed_state_dict = {key.replace("heads.", "heads.head.") if key.startswith("heads.") else key: state_dict[key] for key in state_dict}
 
-    # Load the renamed state_dict
     model.load_state_dict(renamed_state_dict)
-    model.eval()  # Set model to evaluation mode
+    model.eval()
     print("Model loaded successfully!")
 
 except Exception as e:
     print(f"Error loading model: {e}")
-    model = None  # Prevent predictions if model loading fails
+    model = None
+
+
+@app.route('/')
+def home():
+    return {"message": "ViT Model API is running!"}, 200
 
 
 @app.route('/predict', methods=['POST'])
@@ -65,7 +64,3 @@ def predict():
     except Exception as e:
         print(f"Error during prediction: {e}")
         return {"error": str(e)}, 500
-
-
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=False)  # Production-ready
