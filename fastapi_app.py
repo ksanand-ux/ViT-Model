@@ -4,19 +4,24 @@ import torch
 import torchvision.transforms as transforms
 from fastapi import FastAPI, File, UploadFile
 from PIL import Image
+from torchvision import models
 
 app = FastAPI()
-
-# Load the model
-model_path = "vit_cifar10.pth"
-model = torch.load(model_path, map_location=torch.device("cpu"))
-model.eval()
 
 # Define class labels for CIFAR-10
 class_labels = [
     "airplane", "automobile", "bird", "cat", "deer",
     "dog", "frog", "horse", "ship", "truck"
 ]
+
+# Load model architecture first
+model = models.vit_b_16(weights=None)  # Initialize ViT model
+model_path = "vit_cifar10.pth"
+
+# Load state dictionary into model
+model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
+
+model.eval()  # Set model to evaluation mode
 
 # Image Preprocessing
 def preprocess_image(image_bytes):
