@@ -1,22 +1,28 @@
 import io
+from collections import OrderedDict
 
 import torch
-import torch.nn.functional as F
 import torchvision.transforms as transforms
 from fastapi import FastAPI, File, UploadFile
 from PIL import Image
 
 app = FastAPI()
 
-# Load your model from S3
+# Load the model
 model_path = "vit_cifar10.pth"
 model_state = torch.load(model_path, map_location=torch.device("cpu"))
 
-# Define the model architecture to match the saved state
-from torchvision import models
+# Fix mismatched keys
+new_state_dict = OrderedDict()
+for key, value in model_state.items():
+    new_key = key.replace("heads.", "heads.head.")  # Adjust key names
+    new_state_dict[new_key] = value
 
-model = models.vit_b_16(pretrained=False)  # Ensure this matches your trained model
-model.load_state_dict(model_state)
+# Initialize the model (adjust based on your architecture)
+from torchvision.models import vit_b_16  # Example ViT model
+
+model = vit_b_16(pretrained=False, num_classes=10)  # Adjust if needed
+model.load_state_dict(new_state_dict, strict=False)
 model.eval()
 
 @app.get("/")
@@ -28,16 +34,17 @@ async def predict(file: UploadFile = File(...)):
     image_bytes = await file.read()
     image_tensor = preprocess_image(image_bytes)
     output = model(image_tensor.unsqueeze(0))  # Add batch dimension
-    probabilities = F.softmax(output, dim=1)  # Convert to probabilities
-    predicted_class = torch.argmax(probabilities, dim=1).item()
-    return {"prediction": predicted_class}
+    _, predicted_class = torch.max(output, 1)
+    return {"prediction": predicted_class.item()}
 
-# Function to preprocess image (Implement based on your model's requirements)
+# Function to preprocess image (adjust based on model requirements)
 def preprocess_image(image_bytes):
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = Image.open(io.BytesIO(image_bytes))
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.5], std=[0.5])
     ])
     return transform(image)
+
+# Run API: uvicorn fastapi_app:app --host 0.0.0.0 --port 8000
