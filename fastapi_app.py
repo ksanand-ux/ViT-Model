@@ -8,18 +8,31 @@ from torchvision import models
 
 app = FastAPI()
 
-# Define class labels for CIFAR-10
+# Define CIFAR-10 class labels
 class_labels = [
     "airplane", "automobile", "bird", "cat", "deer",
     "dog", "frog", "horse", "ship", "truck"
 ]
 
-# Load model architecture first
+# Load model architecture
 model = models.vit_b_16(weights=None)  # Initialize ViT model
-model_path = "vit_cifar10.pth"
 
-# Load state dictionary into model
-model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
+# Modify model for CIFAR-10 (10 output classes)
+num_classes = 10
+in_features = model.heads.head.in_features
+model.heads.head = torch.nn.Linear(in_features, num_classes)
+
+# Load trained weights
+model_path = "vit_cifar10.pth"
+state_dict = torch.load(model_path, map_location=torch.device("cpu"))
+
+# Handle renamed keys
+if "heads.weight" in state_dict and "heads.bias" in state_dict:
+    state_dict["heads.head.weight"] = state_dict.pop("heads.weight")
+    state_dict["heads.head.bias"] = state_dict.pop("heads.bias")
+
+# Load state_dict safely
+model.load_state_dict(state_dict, strict=False)
 
 model.eval()  # Set model to evaluation mode
 
