@@ -3,6 +3,7 @@ import io
 import torch
 import torchvision.transforms as transforms
 from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import JSONResponse
 from PIL import Image
 from torchvision import models
 
@@ -14,7 +15,7 @@ class_labels = [
     "dog", "frog", "horse", "ship", "truck"
 ]
 
-# Load model architecture
+# Load Vision Transformer (ViT) model architecture
 model = models.vit_b_16(weights=None)  # Initialize ViT model
 
 # Modify model for CIFAR-10 (10 output classes)
@@ -22,19 +23,22 @@ num_classes = 10
 in_features = model.heads.head.in_features
 model.heads.head = torch.nn.Linear(in_features, num_classes)
 
-# Load trained weights
+# Load trained model weights
 model_path = "vit_cifar10.pth"
-state_dict = torch.load(model_path, map_location=torch.device("cpu"))
 
-# Handle renamed keys
-if "heads.weight" in state_dict and "heads.bias" in state_dict:
-    state_dict["heads.head.weight"] = state_dict.pop("heads.weight")
-    state_dict["heads.head.bias"] = state_dict.pop("heads.bias")
+try:
+    state_dict = torch.load(model_path, map_location=torch.device("cpu"))
 
-# Load state_dict safely
-model.load_state_dict(state_dict, strict=False)
+    # Handle renamed keys if necessary
+    if "heads.weight" in state_dict and "heads.bias" in state_dict:
+        state_dict["heads.head.weight"] = state_dict.pop("heads.weight")
+        state_dict["heads.head.bias"] = state_dict.pop("heads.bias")
 
-model.eval()  # Set model to evaluation mode
+    model.load_state_dict(state_dict, strict=False)
+    model.eval()  # Set model to evaluation mode
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
 
 # Image Preprocessing
 def preprocess_image(image_bytes):
@@ -52,15 +56,18 @@ def read_root():
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
-    image_bytes = await file.read()
-    image_tensor = preprocess_image(image_bytes)
+    try:
+        image_bytes = await file.read()
+        image_tensor = preprocess_image(image_bytes)
 
-    # Get model prediction
-    with torch.no_grad():
-        output = model(image_tensor)
-        predicted_class = output.argmax(dim=1).item()  # Get class index
-    
-    # Map index to label
-    predicted_label = class_labels[predicted_class]
+        # Get model prediction
+        with torch.no_grad():
+            output = model(image_tensor)
+            predicted_class = output.argmax(dim=1).item()  # Get class index
 
-    return {"prediction": predicted_label}
+        # Map index to label
+        predicted_label = class_labels[predicted_class]
+
+        return JSONResponse(content={"prediction": predicted_label})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
