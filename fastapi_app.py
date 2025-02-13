@@ -24,7 +24,19 @@ in_features = model.heads.head.in_features
 model.heads.head = torch.nn.Linear(in_features, num_classes)
 
 # Load trained model weights
-model_path = "fine_tuned_vit_fixed.pth"
+import boto3
+
+# Define S3 bucket details
+s3_bucket = "e-see-vit-model"
+s3_key = "models/fine_tuned_vit_fixed.pth"
+local_model_path = "fine_tuned_vit_fixed.pth"
+
+# Download the model from S3 (if not already present)
+s3 = boto3.client("s3")
+s3.download_file(s3_bucket, s3_key, local_model_path)
+
+# Now load the model
+model_path = local_model_path
 
 try:
     state_dict = torch.load(model_path, map_location=torch.device("cpu"))
