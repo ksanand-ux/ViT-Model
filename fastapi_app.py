@@ -24,7 +24,7 @@ in_features = model.heads.head.in_features
 model.heads.head = torch.nn.Linear(in_features, num_classes)
 
 # Load trained model weights
-model_path = "vit_cifar10.pth"
+model_path = "fine_tuned_vit.pth"
 
 try:
     state_dict = torch.load(model_path, map_location=torch.device("cpu"))
