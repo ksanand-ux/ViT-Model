@@ -1,0 +1,6 @@
+vit_model_scripted.pt
+vit_model.onnx
+fine_tuned_vit_imagenet100.pth
+fine_tuned_vit_fixed.pth
+vit-env
+__pycache__
