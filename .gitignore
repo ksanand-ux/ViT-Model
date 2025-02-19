@@ -4,3 +4,4 @@ fine_tuned_vit_imagenet100.pth
 vit-env/
 __pycache__/
 *.onnx
+vit_model_scripted.pt
