@@ -13,7 +13,7 @@ model.eval()
 # Dummy input tensor (batch of 1, 3-channel image of size 224x224)
 dummy_input = torch.randn(1, 3, 224, 224)
 
-# Convert to ONNX
+# Convert to ONNX with correct batch dimension fix
 torch.onnx.export(
     model,
     dummy_input,
@@ -21,7 +21,8 @@ torch.onnx.export(
     export_params=True,  # Store trained parameters
     opset_version=17,  # Ensure ONNX compatibility
     do_constant_folding=True,  # Optimize computation graph
-    input_names=["input"], output_names=["output"],  # Naming inputs/outputs
+    input_names=["input"], 
+    output_names=["output"],  # Naming inputs/outputs
     dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},  # Allow dynamic batching
 )
 
