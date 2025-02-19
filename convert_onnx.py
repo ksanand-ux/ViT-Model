@@ -11,8 +11,9 @@ dummy_input = torch.randn(1, 3, 224, 224)
 # Convert to ONNX
 torch.onnx.export(model, dummy_input, "vit_model.onnx",
                   export_params=True,  # Store trained parameters
-                  opset_version=11,  # ONNX version
-                  do_constant_folding=True,  # Optimize graph
-                  input_names=['input'], output_names=['output'])
+                  opset_version=17,  # ONNX version (updated to 17)
+                  do_constant_folding=True,  # Optimize computation graph
+                  input_names=['input'], output_names=['output'],  # Naming inputs/outputs
+                  dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})  # Allow dynamic batching
 
 print("ONNX Model Saved: vit_model.onnx")
