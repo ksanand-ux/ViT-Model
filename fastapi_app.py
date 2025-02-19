@@ -18,8 +18,9 @@ local_model_path = "fine_tuned_vit_imagenet100.onnx"
 # ✅ **Initialize AWS S3 Client**
 s3 = boto3.client("s3")
 
-# ✅ **Initialize Redis Cache**
+# ✅ **Redis Connection (Kubernetes Service)**
 redis_client = redis.Redis(host="redis-service", port=6379, db=0, decode_responses=True)
+
 
 def is_model_updated():
     """Check if a newer ONNX model exists in S3."""
@@ -35,19 +36,29 @@ def is_model_updated():
         print(f"⚠️ Error checking S3 model: {e}")
         return False
 
+
 def download_model():
     """Download the latest ONNX model from S3."""
     print("🔄 Downloading new ONNX model from S3...")
     s3.download_file(s3_bucket, s3_key, local_model_path)
 
+
 def load_model():
     """Load the ONNX model into memory."""
-    global ort_session, class_labels
+    global ort_session, input_name, class_labels
+
+    if not os.path.exists(local_model_path):
+        print("⚠️ Model file not found. Downloading...")
+        download_model()
+
     ort_session = ort.InferenceSession(local_model_path)
 
-    print("✅ ONNX Model Loaded & Ready for Inference!")
+    # Get model input name dynamically
+    input_name = ort_session.get_inputs()[0].name
+    print(f"✅ ONNX Model Loaded: {local_model_path}")
+    print(f"✅ Model Input Name: {input_name}")
 
-    # ✅ **Ensure Class Labels Match ONNX Model Output (100 Labels)**
+    # Load class labels
     class_labels = [
         "bonnet, poke bonnet", "green mamba", "langur", "Doberman, Doberman pinscher", "gyromitra",
         "Saluki, gazelle hound", "vacuum, vacuum cleaner", "window screen", "cocktail shaker", "garden spider, Aranea diademata",
@@ -76,10 +87,12 @@ def load_model():
         "goose", "borzoi, Russian wolfhound"
     ]
 
+
 # Ensure latest ONNX model is downloaded on startup
 if is_model_updated():
     download_model()
 load_model()
+
 
 # ✅ **Image Preprocessing**
 def preprocess_image(image_bytes):
@@ -91,13 +104,15 @@ def preprocess_image(image_bytes):
     image = np.expand_dims(image, axis=0)  # Add batch dimension
     return image
 
+
 @app.get("/")
 def read_root():
     return {"message": "ViT Model API is running with ONNX!"}
 
+
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
-    """Check for new ONNX model before making predictions"""
+    """Predict image class using ONNX model."""
     if is_model_updated():
         download_model()
         load_model()
@@ -106,24 +121,17 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
-        print(f"✅ Input Shape: {input_tensor.shape}")  # Debugging
-
         # Run ONNX inference
-        outputs = ort_session.run(None, {ort_session.get_inputs()[0].name: input_tensor})
+        outputs = ort_session.run(None, {input_name: input_tensor})
 
-        print(f"✅ Model Output Shape: {outputs[0].shape}")  # Debugging
-
-        # Check if output shape matches class_labels
-        if outputs[0].shape[1] != len(class_labels):
-            print(f"❌ Model Output Mismatch: Expected {len(class_labels)}, Got {outputs[0].shape[1]}")
-            return {"error": f"Model output ({outputs[0].shape[1]} classes) does not match labels ({len(class_labels)})"}
-
-        # Get predicted class index
+        # Get predicted class index and label
         predicted_class = np.argmax(outputs[0])
-        print(f"✅ Predicted Index: {predicted_class}")  # Debugging
 
-        return {"prediction": class_labels[predicted_class]}
+        if predicted_class >= len(class_labels):
+            return {"error": "Predicted class index is out of range!"}
 
+        predicted_label = class_labels[predicted_class]
+
+        return {"prediction": predicted_label}
     except Exception as e:
-        print(f"❌ ERROR: {e}")
         return {"error": str(e)}
