@@ -18,7 +18,7 @@ local_model_path = "fine_tuned_vit_imagenet100.onnx"
 # ✅ **Initialize AWS S3 Client**
 s3 = boto3.client("s3")
 
-# ✅ **Redis Connection (Kubernetes Service)**
+# ✅ **Initialize Redis Cache**
 redis_client = redis.Redis(host="redis-service", port=6379, db=0, decode_responses=True)
 
 def is_model_updated():
@@ -43,15 +43,11 @@ def download_model():
 def load_model():
     """Load the ONNX model into memory."""
     global ort_session, class_labels
-
-    if not os.path.exists(local_model_path):
-        print("❌ Model file missing! Downloading...")
-        download_model()
-
     ort_session = ort.InferenceSession(local_model_path)
+
     print("✅ ONNX Model Loaded & Ready for Inference!")
 
-    # ✅ **Class Labels (Ensure these match your dataset)**
+    # ✅ **Ensure Class Labels Match ONNX Model Output (100 Labels)**
     class_labels = [
         "bonnet, poke bonnet", "green mamba", "langur", "Doberman, Doberman pinscher", "gyromitra",
         "Saluki, gazelle hound", "vacuum, vacuum cleaner", "window screen", "cocktail shaker", "garden spider, Aranea diademata",
@@ -85,6 +81,7 @@ if is_model_updated():
     download_model()
 load_model()
 
+# ✅ **Image Preprocessing**
 def preprocess_image(image_bytes):
     """Preprocess uploaded image before feeding into ONNX model."""
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
@@ -109,28 +106,24 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
-        print("DEBUG: Input tensor shape:", input_tensor.shape)  # Debugging
+        print(f"✅ Input Shape: {input_tensor.shape}")  # Debugging
 
         # Run ONNX inference
-        outputs = ort_session.run(None, {"input": input_tensor})
+        outputs = ort_session.run(None, {ort_session.get_inputs()[0].name: input_tensor})
 
-        print("DEBUG: Model output:", outputs)  # Debugging
-        print("DEBUG: Model output shape:", outputs[0].shape)
+        print(f"✅ Model Output Shape: {outputs[0].shape}")  # Debugging
 
-        # **Fix potential indexing error**
-        if len(outputs) == 0 or len(outputs[0]) == 0:
-            return {"error": "Model output is empty"}
+        # Check if output shape matches class_labels
+        if outputs[0].shape[1] != len(class_labels):
+            print(f"❌ Model Output Mismatch: Expected {len(class_labels)}, Got {outputs[0].shape[1]}")
+            return {"error": f"Model output ({outputs[0].shape[1]} classes) does not match labels ({len(class_labels)})"}
 
-        predicted_class = int(np.argmax(outputs[0][0]))  # Select first batch
+        # Get predicted class index
+        predicted_class = np.argmax(outputs[0])
+        print(f"✅ Predicted Index: {predicted_class}")  # Debugging
 
-        print("DEBUG: Predicted class index:", predicted_class)  # Debugging
+        return {"prediction": class_labels[predicted_class]}
 
-        if predicted_class >= len(class_labels):
-            return {"error": f"Predicted class index {predicted_class} out of range"}
-
-        predicted_label = class_labels[predicted_class]
-
-        return {"prediction": predicted_label}
     except Exception as e:
-        print("ERROR:", str(e))  # Debugging
+        print(f"❌ ERROR: {e}")
         return {"error": str(e)}
