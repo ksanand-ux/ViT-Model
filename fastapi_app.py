@@ -29,7 +29,7 @@ def is_model_updated():
 
 def download_model():
     """Download the latest ONNX model from S3."""
-    print("🔄 Downloading new ONNX model from S3...")
+    print("Downloading new ONNX model from S3...")
     s3.download_file(s3_bucket, s3_key, local_model_path)
 
 def load_model():
@@ -37,7 +37,7 @@ def load_model():
     global ort_session, class_labels
     ort_session = ort.InferenceSession(local_model_path)
 
-    print("✅ ONNX Model Loaded & Ready for Inference!")
+    print("ONNX Model Loaded & Ready for Inference!")
 
     # Load class labels
     class_labels = [
