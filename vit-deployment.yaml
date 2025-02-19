@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vit-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vit-api
+  template:
+    metadata:
+      labels:
+        app: vit-api
+    spec:
+      containers:
+      - name: vit-api
+        image: 087735574692.dkr.ecr.us-east-1.amazonaws.com/vit-api:latest  # Ensure it's correct
+        ports:
+        - containerPort: 8080
