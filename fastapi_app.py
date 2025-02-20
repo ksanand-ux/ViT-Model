@@ -1,88 +1,91 @@
 import os
-from io import BytesIO
 
+import boto3
 import numpy as np
 import onnxruntime as ort
-import requests
-import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 
+# Constants
+BUCKET_NAME = "e-see-vit-model"
+MODEL_KEY = "models/fine_tuned_vit_imagenet100.onnx"
+LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100.onnx"
+
+# Global variable for ONNX session
+ort_session = None
+
 app = FastAPI()
 
-# Model Path and S3 Config
-MODEL_NAME = "fine_tuned_vit_imagenet100.onnx"
-MODEL_URL = f"https://e-see-vit-model.s3.amazonaws.com/models/{MODEL_NAME}"
-LOCAL_MODEL_PATH = f"./{MODEL_NAME}"
-
-# Auto-download model if not present
+# 🔄 Download the latest ONNX model from S3
 def download_model():
-    if not os.path.exists(LOCAL_MODEL_PATH):
-        print("Downloading new ONNX model from S3...")
-        response = requests.get(MODEL_URL)
-        if response.status_code == 200:
-            with open(LOCAL_MODEL_PATH, 'wb') as f:
-                f.write(response.content)
-            print("Model downloaded successfully.")
-        else:
-            print("Failed to download the model.")
-            raise HTTPException(status_code=500, detail="Model download failed.")
-    else:
-        print("Model already exists locally.")
+    print("🔄 Downloading new ONNX model from S3...")
+    s3 = boto3.client('s3')
+    s3.download_file(BUCKET_NAME, MODEL_KEY, LOCAL_MODEL_PATH)
+    print("✅ Model Download Complete.")
 
 # 🔄 Load the ONNX model
 def load_model():
     global ort_session
-    download_model()
-    ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
-    print("ONNX Model Loaded & Ready for Inference!")
+    try:
+        print("🔄 Starting model loading process...")  # Debug Start
+        download_model()
+        print("📁 Model Download Complete. Loading ONNX Model...")
+        ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
+        print("✅ ONNX Model Loaded & Ready for Inference!")  # Debug End
+    except Exception as e:
+        print(f"❌ Error Loading Model: {e}")
 
+# Call the function to load the model at startup
 load_model()
 
-# 🔍 Preprocess image
-def preprocess_image(image: Image.Image):
-    print(f"Original Image Size: {image.size}")
-    image = image.convert("RGB")
-    image = image.resize((224, 224))  # Resize to 224x224
-    input_tensor = np.array(image).astype(np.float32) / 255.0  # Normalize to [0, 1]
-    input_tensor = np.transpose(input_tensor, (2, 0, 1))  # Change to (C, H, W)
-    input_tensor = np.expand_dims(input_tensor, axis=0)  # Add batch dimension
-    print(f"Preprocessed Input Tensor Shape: {input_tensor.shape}")
-    return input_tensor
+# 🔄 Preprocess image for ONNX model
+def preprocess_image(image: Image.Image) -> np.ndarray:
+    print("🔄 Preprocessing Image...")
+    image = image.resize((224, 224))
+    image = np.array(image).astype(np.float32)
+    
+    # Debug Statements
+    print(f"Image Shape Before Transpose: {image.shape}")
+    
+    if image.ndim == 2:  # Grayscale to RGB
+        image = np.stack([image] * 3, axis=-1)
+    elif image.shape[2] == 4:  # RGBA to RGB
+        image = image[..., :3]
+    
+    image = np.transpose(image, (2, 0, 1))  # HWC to CHW
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    
+    print(f"Input Tensor Shape: {image.shape}")
+    return image
 
+# 🔄 Predict using ONNX model
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
-    # Ensure file is an image
-    if not file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        raise HTTPException(status_code=400, detail="File must be an image (PNG, JPG, or JPEG).")
+    try:
+        print(f"📁 Received File: {file.filename}")
+        
+        # Read image
+        image = Image.open(file.file).convert("RGB")
+        
+        # Preprocess the image
+        input_tensor = preprocess_image(image)
+        print(f"Input Tensor Shape: {input_tensor.shape}")
+        
+        # Run inference
+        outputs = ort_session.run(None, {"input": input_tensor})
+        print(f"ONNX Model Output: {outputs}")
+        
+        # Get prediction
+        pred = int(np.argmax(outputs[0]))
+        print(f"Predicted Class: {pred}")
+        
+        return JSONResponse({"prediction": pred})
     
-    # Load image
-    image = Image.open(BytesIO(await file.read()))
-    input_tensor = preprocess_image(image)
-    
-    # Debug: Check input tensor shape
-    print(f"Input Tensor Shape: {input_tensor.shape}")
+    except Exception as e:
+        print(f"❌ Error During Inference: {e}")
+        raise HTTPException(status_code=500, detail=f"Prediction Error: {e}")
 
-    # Check Model Input Name
-    input_name = ort_session.get_inputs()[0].name
-    print(f"Model Input Name: {input_name}")
-    
-    # Run Inference
-    outputs = ort_session.run(None, {input_name: input_tensor})
-
-    # Debug: Check raw model output
-    print(f"ONNX Model Raw Output: {outputs}")
-
-    # Check if output is not empty
-    if len(outputs) == 0:
-        raise HTTPException(status_code=500, detail="Model output is empty.")
-    
-    # Check Output Shape
-    print(f"ONNX Model Output Shape: {outputs[0].shape}")
-    
-    # Get prediction
-    predictions = outputs[0]
-    predicted_class = int(np.argmax(predictions, axis=1)[0])
-    
-    return JSONResponse({"predicted_class": predicted_class})
+@app.get("/")
+def root():
+    return {"message": "ViT Model API is running with ONNX!"}
