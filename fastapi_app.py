@@ -115,18 +115,25 @@ async def predict(file: UploadFile = File(...)):
     try:
         print(f"Received File: {file.filename}")
         
-        # Verify file type
-        if file.content_type not in ["image/jpeg", "image/png"]:
-            raise HTTPException(status_code=400, detail="Only JPEG and PNG images are supported.")
-        
         # Read image
         image = Image.open(file.file).convert("RGB")
         
         # Preprocess the image
         input_tensor = preprocess_image(image)
         
+        # Debug: Input Tensor Details Before Inference
+        print(f"Input Tensor Shape Before Inference: {input_tensor.shape}")
+        print(f"Input Tensor Data Type: {input_tensor.dtype}")
+        print(f"Input Tensor Values: {input_tensor}")
+        
         # Run inference
         outputs = ort_session.run(None, {ort_session.get_inputs()[0].name: input_tensor})
+        
+        # Debug: Output Details After Inference
+        print("ONNX Model Output:", outputs)
+        print("ONNX Model Output Shape:", outputs[0].shape if outputs else "Empty Output")
+        print("ONNX Model Output Data Type:", type(outputs[0]) if outputs else "No Output")
+        print("ONNX Model Output Values:", outputs[0] if outputs else "No Output")
         
         # Get prediction
         output_tensor = outputs[0]
@@ -139,11 +146,3 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error During Inference: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction Error: {e}")
-
-# Health Check Endpoint
-@app.get("/health/")
-async def health_check():
-    return JSONResponse(content={"status": "healthy"})
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
