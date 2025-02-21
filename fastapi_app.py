@@ -64,32 +64,37 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     image = np.array(image).astype(np.float32) / 255.0  
     print(f"Image Array Shape Before Transpose: {image.shape}")
     print(f"Image Array Values (Sample): {image[0][0]}")
+    print(f"Data Type After Normalization: {image.dtype}")
 
     # Handle Grayscale or RGBA images
     if image.ndim == 2:  # Grayscale to RGB
         print("Converting Grayscale to RGB...")
-        image = np.stack([image] * 3, axis=-1)
+        image = np.stack([image] * 3, axis=-1).astype(np.float32)
     elif image.shape[2] == 4:  # RGBA to RGB
         print("Converting RGBA to RGB...")
-        image = image[..., :3]
+        image = image[..., :3].astype(np.float32)
+    print(f"Data Type After Handling Channels: {image.dtype}")
 
     # Normalize Using ImageNet Mean & Std
-    mean = np.array([0.485, 0.456, 0.406]).reshape(1, 1, 3)
-    std = np.array([0.229, 0.224, 0.225]).reshape(1, 1, 3)
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
     image = (image - mean) / std
+    image = image.astype(np.float32)  # Enforce float32 again
     print(f"Image Array After Normalization (Sample): {image[0][0]}")
+    print(f"Data Type After ImageNet Normalization: {image.dtype}")
 
     # Transpose HWC to CHW
-    image = np.transpose(image, (2, 0, 1))
+    image = np.transpose(image, (2, 0, 1)).astype(np.float32)
     print(f"Image Array Shape After Transpose: {image.shape}")
+    print(f"Data Type After Transpose: {image.dtype}")
     
     # Add batch dimension
-    image = np.expand_dims(image, axis=0)
+    image = np.expand_dims(image, axis=0).astype(np.float32)
     print(f"Final Input Tensor Shape: {image.shape}")
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
-    # Critical Fix: Forcefully Convert to float32 without Copy
+    # 🔥 Final Fix: Forcefully Convert to float32 without Copy
     image = image.astype(np.float32, copy=False)
     print(f"Final Input Tensor Data Type (Force Fixed): {image.dtype}")
 
