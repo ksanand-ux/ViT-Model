@@ -4,7 +4,6 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
-import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
@@ -55,13 +54,12 @@ load_model()
 def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     print("Preprocessing Image...")
 
-    # 🔥 Bypass NumPy and PyTorch - Direct Conversion using ONNX Runtime
     # Load and Convert to RGB
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
 
-    # Directly Create a Float32 NumPy Array
-    np_image = np.array(image, dtype=np.float32) / 255.0  # Float32 from the start
+    # Convert Image to Float32 Array Directly
+    np_image = np.asarray(image, dtype=np.float32) / 255.0  # Enforce float32 from the start
     np_image = np_image.transpose(2, 0, 1)  # Transpose to CHW format
 
     # Normalize Using ImageNet Mean & Std
@@ -70,14 +68,13 @@ def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     np_image = (np_image - mean) / std
 
     # Add Batch Dimension
-    input_tensor = np.expand_dims(np_image, axis=0)
+    input_tensor = np.expand_dims(np_image, axis=0).astype(np.float32)
 
     # Debugging Information
     print(f"Final Input Tensor Shape: {input_tensor.shape}")
     print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
-    print(f"Final Input Tensor Values (Sample): {input_tensor.flatten()[:10]}")
 
-    # 🔥 Directly Use OrtValue to Bypass NumPy and PyTorch
+    # 🔥 Directly Use OrtValue with Explicit float32 Specification
     ort_value = ort.OrtValue.ortvalue_from_numpy(input_tensor, 'cpu')
     return ort_value
 
@@ -106,4 +103,5 @@ def health_check():
     return JSONResponse({"status": "healthy"})
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
