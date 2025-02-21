@@ -126,6 +126,9 @@ async def predict(file: UploadFile = File(...)):
         
         # Preprocess the image
         input_tensor = preprocess_image(image)
+
+        # Debug: Confirm Input Tensor Data Type
+        print(f"Input Tensor Data Type Before Inference: {input_tensor.dtype}")
         
         # Run inference
         print("Starting Inference...")
