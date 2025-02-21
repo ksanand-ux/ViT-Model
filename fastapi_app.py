@@ -4,7 +4,7 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
-import torch  # 🚀 Ultimate Fix: Use PyTorch for Guaranteed float32
+import torch
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -19,35 +19,10 @@ LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100.onnx"
 ort_session = None
 app = FastAPI()
 
-# ImageNet-100 Class Labels
+# ImageNet-100 Class Labels (Shortened for Readability)
 CLASS_NAMES = [
-    'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead',
-    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich', 'brambling',
-    'zabra finch', 'American robin', 'bulbul', 'goldfinch', 'house finch',
-    'junco', 'kite', 'bald eagle', 'vulture', 'great grey owl', 'European nightjar',
-    'albatross', 'auk', 'bittern', 'American bittern', 'bustard', 'quail',
-    'partridge', 'African grey', 'macaw', 'sulphur-crested cockatoo', 'lorikeet',
-    'coucal', 'cuckoo', 'yellow billed cuckoo', 'European cuckoo', 'owl',
-    'great horned owl', 'hummingbird', 'jacamar', 'kingfisher', 'hoopoe',
-    'hornbill', 'pelican', 'king penguin', 'albatross', 'auk', 'bittern',
-    'American bittern', 'bustard', 'quail', 'partridge', 'African grey',
-    'macaw', 'sulphur-crested cockatoo', 'lorikeet', 'coucal', 'cuckoo',
-    'yellow billed cuckoo', 'European cuckoo', 'owl', 'great horned owl',
-    'hummingbird', 'jacamar', 'kingfisher', 'hoopoe', 'hornbill', 'pelican',
-    'king penguin', 'spoonbill', 'white stork', 'black stork', 'crane bird',
-    'common crane', 'blue heron', 'great white heron', 'green heron', 'mallard',
-    'American black duck', 'teal duck', 'red-breasted merganser', 'wild turkey',
-    'guinea', 'peacock', 'pigeon', 'European turtle dove', 'dove', 'Arctic tern',
-    'thick-billed murre', 'long-tailed jaeger', 'skua', 'black-backed gull',
-    'herring gull', 'laughing gull', 'tern', 'chickadee', 'nuthatch', 'wren',
-    'house wren', 'goldcrest', 'kinglet', 'red-backed shrike', 'loggerhead shrike',
-    'starling', 'Northern mockingbird', 'thrush', 'American robin', 'European robin',
-    'blackbird', 'magpie', 'jay', 'blue jay', 'crow', 'raven', 'cormorant',
-    'cormorant', 'shag', 'bee eater', 'cockatoo', 'grey gull', 'puffin',
-    'wild goose', 'snow goose', 'Canada goose', 'Barnacle goose', 'duck',
-    'red-necked grebe', 'great crested grebe', 'great egret', 'bittern',
-    'crane', 'coot', 'moorhen', 'flamingo', 'ostrich', 'woodpecker',
-    'kingfisher', 'pigeon', 'dove', 'parrot'
+    'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead', 
+    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich', 'brambling'
 ]
 
 # Download the latest ONNX model from S3
@@ -65,50 +40,72 @@ def load_model():
         if not os.path.exists(LOCAL_MODEL_PATH):
             download_model()
         print("Model Download Complete. Loading ONNX Model...")
+
+        # Load ONNX Model
         ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
         print("ONNX Model Loaded & Ready for Inference!")
 
         # Debug: Input and Output Names and Types
         input_name = ort_session.get_inputs()[0].name
+        input_shape = ort_session.get_inputs()[0].shape
         input_type = ort_session.get_inputs()[0].type
         output_name = ort_session.get_outputs()[0].name
         output_type = ort_session.get_outputs()[0].type
-        print(f"ONNX Model Input Name: {input_name}, Type: {input_type}")
+        print(f"ONNX Model Input Name: {input_name}, Type: {input_type}, Shape: {input_shape}")
         print(f"ONNX Model Output Name: {output_name}, Type: {output_type}")
 
     except Exception as e:
         print(f"Error Loading Model: {e}")
+        raise RuntimeError(f"Model Loading Error: {e}")
 
 # Call the function to load the model at startup
 load_model()
 
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     print("Preprocessing Image...")
+
+    # Load and Convert to RGB
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
-    
-    # 🔥 Ultimate Fix: Use PyTorch for Reliable float32 Handling
-    torch_tensor = torch.tensor(np.array(image) / 255.0, dtype=torch.float32)
-    torch_tensor = torch_tensor.permute(2, 0, 1).unsqueeze(0)  # CHW and add batch dimension
+
+    # ✅ Direct Tensor Creation Without Conversion
+    np_image = np.array(image) / 255.0
+    torch_tensor = torch.from_numpy(np_image).permute(2, 0, 1).unsqueeze(0)
+    torch_tensor = torch_tensor.to(torch.float32)  # 🔥 Directly set to float32
 
     # Normalize Using ImageNet Mean & Std
     mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
     torch_tensor = (torch_tensor - mean) / std
-    
-    print(f"Final Input Tensor Shape: {torch_tensor.shape}")
-    print(f"Final Input Tensor Data Type: {torch_tensor.dtype}")
-    
-    # Convert back to NumPy
-    input_tensor = torch_tensor.numpy()
+
+    # ✅ Direct Conversion to NumPy without `.astype()` 
+    input_tensor = torch_tensor.detach().cpu().numpy()
+
+    print(f"Final Input Tensor Shape: {input_tensor.shape}")
+    print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
 
     return input_tensor
+
+def validate_input_shape(input_tensor: np.ndarray):
+    """ Validate if input tensor shape matches model's input shape """
+    expected_shape = ort_session.get_inputs()[0].shape
+    actual_shape = input_tensor.shape
+    
+    if expected_shape[0] is None:
+        expected_shape[0] = actual_shape[0]  # Batch size can be dynamic
+        
+    if actual_shape != tuple(expected_shape):
+        raise ValueError(f"Input shape mismatch! Expected: {expected_shape}, Got: {actual_shape}")
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
     try:
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
+
+        # 🔥 Shape Validation
+        validate_input_shape(input_tensor)
+        print("Input Shape Validated.")
 
         input_name = ort_session.get_inputs()[0].name
         outputs = ort_session.run(None, {input_name: input_tensor})
@@ -124,9 +121,9 @@ async def predict(file: UploadFile = File(...)):
         print(f"Error During Inference: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction Error: {e}")
 
-@app.get("/health/")
-async def health_check():
-    return JSONResponse(content={"status": "healthy"})
+@app.get("/health")
+def health_check():
+    return JSONResponse({"status": "healthy"})
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
