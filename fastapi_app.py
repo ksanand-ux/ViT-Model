@@ -68,10 +68,10 @@ def load_model():
         print("ONNX Model Loaded & Ready for Inference!")
 
         # Debug: Input and Output Names and Types
-        input_name = ort_session.get_inputs().name
-        input_type = ort_session.get_inputs().type
-        output_name = ort_session.get_outputs().name
-        output_type = ort_session.get_outputs().type
+        input_name = ort_session.get_inputs()[0].name
+        input_type = ort_session.get_inputs()[0].type
+        output_name = ort_session.get_outputs()[0].name
+        output_type = ort_session.get_outputs()[0].type
         print(f"ONNX Model Input Name: {input_name}, Type: {input_type}")
         print(f"ONNX Model Output Name: {output_name}, Type: {output_type}")
 
@@ -81,35 +81,31 @@ def load_model():
 # Call the function to load the model at startup
 load_model()
 
+# Preprocess image for ONNX model
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     print("Preprocessing Image...")
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except Exception as e:
-        raise ValueError(f"Error opening image: {e}")
-
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
 
-    # 🔥 The ULTIMATE Fix (Revised): Guaranteed Float32 from the Start
-    image = np.array(image, dtype=np.float32) / 255.0  # Normalize and force float32 immediately
+    # 🔥 The ULTIMATE Fix: Memory-Aligned Float32
+    image = np.array(image, dtype=np.float32) / 255.0
 
-    if image.ndim == 2:
-        image = np.stack([image] * 3, axis=-1)
-    elif image.shape == 4:
-        image = image[...,:3]
-
-    mean = np.array(, dtype=np.float32).reshape(1, 1, 3)
-    std = np.array(, dtype=np.float32).reshape(1, 1, 3)
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
     image = (image - mean) / std
 
     image = np.transpose(image, (2, 0, 1))
     image = np.expand_dims(image, axis=0)
 
-    print(f"Final Input Tensor Shape: {image.shape}")
-    print(f"Final Input Tensor Data Type: {image.dtype}")
-    print(f"Final Input Tensor Values (Sample): {image}")
+    # 🔥 Ultimate Fix: Memory Alignment
+    final_image = np.zeros(image.shape, dtype=np.float32)
+    np.copyto(final_image, image)
 
-    return image
+    print(f"Final Input Tensor Shape: {final_image.shape}")
+    print(f"Final Input Tensor Data Type: {final_image.dtype}")
+    print(f"Final Input Tensor Values (Sample): {final_image[0][0][0]}")
+
+    return final_image
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
@@ -117,17 +113,16 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
-        input_name = ort_session.get_inputs().name
+        input_name = ort_session.get_inputs()[0].name
 
-        # Print input tensor details just before inference
         print(f"Input Tensor (Before Inference): Shape={input_tensor.shape}, dtype={input_tensor.dtype}")
 
         outputs = ort_session.run(None, {input_name: input_tensor})
 
-        output_tensor = outputs
-        print(f"Output Tensor Shape: {output_tensor.shape}, dtype={output_tensor.dtype}")  # Debug output
+        output_tensor = outputs[0]
+        print(f"Output Tensor Shape: {output_tensor.shape}, dtype={output_tensor.dtype}")
 
-        predicted_class_index = np.argmax(output_tensor, axis=1)
+        predicted_class_index = np.argmax(output_tensor, axis=1)[0]
         predicted_class_name = CLASS_NAMES[predicted_class_index]
         print(f"Predicted Class: {predicted_class_name}")
 
