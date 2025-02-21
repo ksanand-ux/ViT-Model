@@ -4,6 +4,7 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
+import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
@@ -17,10 +18,35 @@ LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100.onnx"
 ort_session = None
 app = FastAPI()
 
-# ImageNet-100 Class Labels (Partial for brevity)
+# ImageNet-100 Class Labels
 CLASS_NAMES = [
     'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead',
-    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich'
+    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich', 'brambling',
+    'zabra finch', 'American robin', 'bulbul', 'goldfinch', 'house finch',
+    'junco', 'kite', 'bald eagle', 'vulture', 'great grey owl', 'European nightjar',
+    'albatross', 'auk', 'bittern', 'American bittern', 'bustard', 'quail',
+    'partridge', 'African grey', 'macaw', 'sulphur-crested cockatoo', 'lorikeet',
+    'coucal', 'cuckoo', 'yellow billed cuckoo', 'European cuckoo', 'owl',
+    'great horned owl', 'hummingbird', 'jacamar', 'kingfisher', 'hoopoe',
+    'hornbill', 'pelican', 'king penguin', 'albatross', 'auk', 'bittern',
+    'American bittern', 'bustard', 'quail', 'partridge', 'African grey',
+    'macaw', 'sulphur-crested cockatoo', 'lorikeet', 'coucal', 'cuckoo',
+    'yellow billed cuckoo', 'European cuckoo', 'owl', 'great horned owl',
+    'hummingbird', 'jacamar', 'kingfisher', 'hoopoe', 'hornbill', 'pelican',
+    'king penguin', 'spoonbill', 'white stork', 'black stork', 'crane bird',
+    'common crane', 'blue heron', 'great white heron', 'green heron', 'mallard',
+    'American black duck', 'teal duck', 'red-breasted merganser', 'wild turkey',
+    'guinea', 'peacock', 'pigeon', 'European turtle dove', 'dove', 'Arctic tern',
+    'thick-billed murre', 'long-tailed jaeger', 'skua', 'black-backed gull',
+    'herring gull', 'laughing gull', 'tern', 'chickadee', 'nuthatch', 'wren',
+    'house wren', 'goldcrest', 'kinglet', 'red-backed shrike', 'loggerhead shrike',
+    'starling', 'Northern mockingbird', 'thrush', 'American robin', 'European robin',
+    'blackbird', 'magpie', 'jay', 'blue jay', 'crow', 'raven', 'cormorant',
+    'cormorant', 'shag', 'bee eater', 'cockatoo', 'grey gull', 'puffin',
+    'wild goose', 'snow goose', 'Canada goose', 'Barnacle goose', 'duck',
+    'red-necked grebe', 'great crested grebe', 'great egret', 'bittern',
+    'crane', 'coot', 'moorhen', 'flamingo', 'ostrich', 'woodpecker',
+    'kingfisher', 'pigeon', 'dove', 'parrot'
 ]
 
 # Download the latest ONNX model from S3
@@ -55,41 +81,35 @@ def load_model():
 # Call the function to load the model at startup
 load_model()
 
-# Ultimate Fix: Force Float32 with Memory Alignment
-def preprocess_image(image_bytes: bytes) -> np.ndarray:
+def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     print("Preprocessing Image...")
-
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except Exception as e:
-        raise ValueError(f"Error opening image: {e}")
-
-    # Step 1: Resize to 224x224
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
-
-    # Step 2: Convert to NumPy Array and Normalize
     image = np.array(image, dtype=np.float32) / 255.0
+    
+    # Handle Channels
+    if image.ndim == 2:
+        image = np.stack([image] * 3, axis=-1)
+    elif image.shape[2] == 4:
+        image = image[..., :3]
 
-    # Step 3: Normalize Using ImageNet Mean & Std
+    # Normalize Using ImageNet Mean & Std
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
     image = (image - mean) / std
 
-    # Step 4: Transpose HWC to CHW
     image = np.transpose(image, (2, 0, 1))
-
-    # Step 5: Add batch dimension
     image = np.expand_dims(image, axis=0)
 
-    # Step 6: Ultimate Fix: Memory-Aligned Float32
-    final_image = np.ascontiguousarray(image, dtype=np.float32)
+    # 🔥 ULTIMATE FIX: Use ONNX's OrtValue to Force float32
+    input_tensor = ort.OrtValue.ortvalue_from_numpy(image, 'cpu')
+    input_tensor.set_dtype(np.float32)
 
-    # Final Checks
-    print(f"Final Input Tensor Shape: {final_image.shape}")
-    print(f"Final Input Tensor Data Type: {final_image.dtype}")
-    print(f"Final Input Tensor Values (Sample): {final_image[0][0][0:5]}")
+    print(f"Final Input Tensor Shape: {image.shape}")
+    print(f"Final Input Tensor Data Type: {image.dtype}")
+    print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
-    return final_image
+    return input_tensor
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
@@ -97,19 +117,12 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
-        # 🔥 Match the ONNX Input Name Exactly
         input_name = ort_session.get_inputs()[0].name
 
-        # Double Check Before Inference
-        print(f"Input Tensor (Before Inference): Shape={input_tensor.shape}, dtype={input_tensor.dtype}")
-
-        # Run Inference
-        outputs = ort_session.run(None, {input_name: input_tensor})
+        # Run Inference with Explicit Data Pointer
+        outputs = ort_session.run(None, {input_name: input_tensor.data_ptr()})
 
         output_tensor = outputs[0]
-        print(f"Output Tensor Shape: {output_tensor.shape}, dtype={output_tensor.dtype}")
-
-        # Get Prediction
         predicted_class_index = np.argmax(output_tensor, axis=1)[0]
         predicted_class_name = CLASS_NAMES[predicted_class_index]
         print(f"Predicted Class: {predicted_class_name}")
@@ -125,5 +138,4 @@ async def health_check():
     return JSONResponse(content={"status": "healthy"})
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")
