@@ -17,14 +17,13 @@ dummy_input = torch.randn(1, 3, 224, 224)
 print("Model Input Shape:", dummy_input.shape)
 print("Model Output Shape (Expected): (1, 100)")
 
-# Export to ONNX Format
-print("Exporting Model to ONNX Format...")
+# Convert to ONNX with Fixed Dynamic Axis
 torch.onnx.export(
     model,
     dummy_input,
     "fine_tuned_vit_imagenet100.onnx",
     export_params=True,  # Store trained parameters
-    opset_version=17,  # Latest ONNX compatibility
+    opset_version=17,  # Ensure ONNX compatibility
     do_constant_folding=True,  # Optimize computation graph
     input_names=["input"], 
     output_names=["output"],  # Naming inputs/outputs
@@ -33,4 +32,4 @@ torch.onnx.export(
     verbose=True  # Detailed export log for debugging
 )
 
-print("ONNX Model Exported Successfully: fine_tuned_vit_imagenet100.onnx")
+print("ONNX Model Exported with Fixed Dynamic Axis: fine_tuned_vit_imagenet100.onnx")
