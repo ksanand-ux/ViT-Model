@@ -3,7 +3,6 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
-import torch  # Import PyTorch for guaranteed float32 handling
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -42,6 +41,12 @@ def load_model():
         ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
         print("ONNX Model Loaded & Ready for Inference!")  # Debug End
         
+        # 🔎 Debug: Print Detailed Input Information
+        input_details = ort_session.get_inputs()[0]
+        print(f"ONNX Input Name: {input_details.name}")
+        print(f"ONNX Input Shape: {input_details.shape}")
+        print(f"ONNX Input Type: {input_details.type}")
+
         # Debug: Input and Output Names
         input_name = ort_session.get_inputs()[0].name
         output_name = ort_session.get_outputs()[0].name
@@ -94,15 +99,6 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
-    # ⚡ New Fix: Convert to PyTorch Tensor and Back
-    # This is the ultimate fix to force float32 without any implicit conversion
-    torch_tensor = torch.tensor(image, dtype=torch.float32)
-    print(f"Torch Tensor Data Type (Check): {torch_tensor.dtype}")
-
-    # Convert Back to NumPy for ONNX
-    image = torch_tensor.numpy()
-    print(f"Final Input Tensor Data Type (After Torch Fix): {image.dtype}")
-
     return image
 
 # Predict using ONNX model
@@ -117,12 +113,13 @@ async def predict(file: UploadFile = File(...)):
         # Preprocess the image
         input_tensor = preprocess_image(image)
 
-        # Double Check: Force Input Tensor to float32 Before Inference
-        input_tensor = input_tensor.astype(np.float32, copy=False)
-        print(f"Final Input Tensor Data Type Before Inference (Force Fixed): {input_tensor.dtype}")
-        
-        # Run inference
-        print("Starting Inference...")
+        # Direct Test: Bypass Preprocessing and Feed Dummy Tensor
+        input_tensor = np.random.randn(1, 3, 224, 224).astype(np.float32)
+        print(f"Dummy Input Tensor Shape: {input_tensor.shape}")
+        print(f"Dummy Input Tensor Data Type: {input_tensor.dtype}")
+
+        # Run inference with Dummy Tensor
+        print("Starting Inference with Dummy Tensor...")
         outputs = ort_session.run(None, {"input": input_tensor})
         
         # Debugging Output Details
