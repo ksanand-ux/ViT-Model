@@ -1,14 +1,13 @@
+import ctypes  # 🚀 New Import: ctypes for direct memory casting
 import os
 
 import boto3
 import numpy as np
 import onnxruntime as ort
-import torch
+import torch  # PyTorch for guaranteed float32 handling
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
-from onnx import \
-    numpy_helper  # 🚀 New Import: ONNX's own helper for input tensor creation
 from PIL import Image
 
 # Constants for S3 Bucket
@@ -102,12 +101,13 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
-    # ⚡ Ultimate Fix: Use ONNX numpy_helper
-    # This guarantees the input is exactly what ONNX expects
-    input_tensor = numpy_helper.from_array(image.astype(np.float32))
-    print(f"ONNX Helper Tensor Data Type (Final Fix): {input_tensor.data_type}")
+    # 🔥 Ultimate Fix: Forceful Memory Type Casting with ctypes
+    image = image.astype(np.float32, copy=False)
+    ptr = image.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    image = np.ctypeslib.as_array(ptr, shape=image.shape)
+    print(f"Final Input Tensor Data Type (After ctypes Fix): {image.dtype}")
 
-    return image.astype(np.float32)  # Make sure it's still float32 for safety
+    return image
 
 # Predict using ONNX model
 @app.post("/predict/")
