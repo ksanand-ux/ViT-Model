@@ -79,24 +79,25 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
     image = (image - mean) / std
-    image = image.astype(np.float32)  # Enforce float32 again
+    # Ultimate Fix: Wrap with np.array() to Force float32
+    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Image Array After Normalization (Sample): {image[0][0]}")
     print(f"Data Type After ImageNet Normalization: {image.dtype}")
 
     # Transpose HWC to CHW
-    image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+    image = np.transpose(image, (2, 0, 1))
+    # Ultimate Fix: Wrap with np.array() to Force float32
+    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Image Array Shape After Transpose: {image.shape}")
     print(f"Data Type After Transpose: {image.dtype}")
     
     # Add batch dimension
-    image = np.expand_dims(image, axis=0).astype(np.float32)
+    image = np.expand_dims(image, axis=0)
+    # Ultimate Fix: Wrap with np.array() to Force float32
+    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Final Input Tensor Shape: {image.shape}")
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
-
-    # 🔥 Final Fix: Forcefully Convert to float32 without Copy
-    image = image.astype(np.float32, copy=False)
-    print(f"Final Input Tensor Data Type (Force Fixed): {image.dtype}")
 
     return image
 
@@ -112,9 +113,9 @@ async def predict(file: UploadFile = File(...)):
         # Preprocess the image
         input_tensor = preprocess_image(image)
 
-        # Double Check: Force Input Tensor to float32 Before Inference
-        input_tensor = input_tensor.astype(np.float32, copy=False)
-        print(f"Final Input Tensor Data Type Before Inference (Force Fixed): {input_tensor.dtype}")
+        # Ultimate Fix: Wrap with np.array() to Force float32
+        input_tensor = np.array(input_tensor, dtype=np.float32, copy=False)
+        print(f"Final Input Tensor Data Type Before Inference (Ultimate Fix): {input_tensor.dtype}")
         
         # Run inference
         print("Starting Inference...")
