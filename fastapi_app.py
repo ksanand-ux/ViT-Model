@@ -4,6 +4,7 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
+import torch  # 🚀 Ultimate Fix: Use PyTorch for Guaranteed float32
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -81,33 +82,25 @@ def load_model():
 # Call the function to load the model at startup
 load_model()
 
-def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
+def preprocess_image(image_bytes: bytes) -> np.ndarray:
     print("Preprocessing Image...")
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
-    image = np.array(image, dtype=np.float32) / 255.0
     
-    # Handle Channels
-    if image.ndim == 2:
-        image = np.stack([image] * 3, axis=-1)
-    elif image.shape[2] == 4:
-        image = image[..., :3]
+    # 🔥 Ultimate Fix: Use PyTorch for Reliable float32 Handling
+    torch_tensor = torch.tensor(np.array(image) / 255.0, dtype=torch.float32)
+    torch_tensor = torch_tensor.permute(2, 0, 1).unsqueeze(0)  # CHW and add batch dimension
 
     # Normalize Using ImageNet Mean & Std
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
-    image = (image - mean) / std
-
-    image = np.transpose(image, (2, 0, 1))
-    image = np.expand_dims(image, axis=0)
-
-    # 🔥 ULTIMATE FIX: Use ONNX's OrtValue to Force float32
-    input_tensor = ort.OrtValue.ortvalue_from_numpy(image, 'cpu')
-    input_tensor.set_dtype(np.float32)
-
-    print(f"Final Input Tensor Shape: {image.shape}")
-    print(f"Final Input Tensor Data Type: {image.dtype}")
-    print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
+    mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
+    torch_tensor = (torch_tensor - mean) / std
+    
+    print(f"Final Input Tensor Shape: {torch_tensor.shape}")
+    print(f"Final Input Tensor Data Type: {torch_tensor.dtype}")
+    
+    # Convert back to NumPy
+    input_tensor = torch_tensor.numpy()
 
     return input_tensor
 
@@ -118,9 +111,7 @@ async def predict(file: UploadFile = File(...)):
         input_tensor = preprocess_image(image_bytes)
 
         input_name = ort_session.get_inputs()[0].name
-
-        # Run Inference with Explicit Data Pointer
-        outputs = ort_session.run(None, {input_name: input_tensor.data_ptr()})
+        outputs = ort_session.run(None, {input_name: input_tensor})
 
         output_tensor = outputs[0]
         predicted_class_index = np.argmax(output_tensor, axis=1)[0]
