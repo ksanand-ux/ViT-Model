@@ -3,6 +3,7 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
+import torch  # Import PyTorch for guaranteed float32 handling
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -79,25 +80,28 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
     image = (image - mean) / std
-    # Ultimate Fix: Wrap with np.array() to Force float32
-    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Image Array After Normalization (Sample): {image[0][0]}")
     print(f"Data Type After ImageNet Normalization: {image.dtype}")
 
     # Transpose HWC to CHW
     image = np.transpose(image, (2, 0, 1))
-    # Ultimate Fix: Wrap with np.array() to Force float32
-    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Image Array Shape After Transpose: {image.shape}")
     print(f"Data Type After Transpose: {image.dtype}")
     
     # Add batch dimension
     image = np.expand_dims(image, axis=0)
-    # Ultimate Fix: Wrap with np.array() to Force float32
-    image = np.array(image, dtype=np.float32, copy=False)
     print(f"Final Input Tensor Shape: {image.shape}")
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
+
+    # ⚡ New Fix: Convert to PyTorch Tensor and Back
+    # This is the ultimate fix to force float32 without any implicit conversion
+    torch_tensor = torch.tensor(image, dtype=torch.float32)
+    print(f"Torch Tensor Data Type (Check): {torch_tensor.dtype}")
+
+    # Convert Back to NumPy for ONNX
+    image = torch_tensor.numpy()
+    print(f"Final Input Tensor Data Type (After Torch Fix): {image.dtype}")
 
     return image
 
@@ -113,9 +117,9 @@ async def predict(file: UploadFile = File(...)):
         # Preprocess the image
         input_tensor = preprocess_image(image)
 
-        # Ultimate Fix: Wrap with np.array() to Force float32
-        input_tensor = np.array(input_tensor, dtype=np.float32, copy=False)
-        print(f"Final Input Tensor Data Type Before Inference (Ultimate Fix): {input_tensor.dtype}")
+        # Double Check: Force Input Tensor to float32 Before Inference
+        input_tensor = input_tensor.astype(np.float32, copy=False)
+        print(f"Final Input Tensor Data Type Before Inference (Force Fixed): {input_tensor.dtype}")
         
         # Run inference
         print("Starting Inference...")
