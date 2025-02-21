@@ -3,6 +3,7 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
+import torch  # 🚀 New Import: PyTorch for guaranteed float32 handling
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -41,17 +42,17 @@ def load_model():
         ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
         print("ONNX Model Loaded & Ready for Inference!")  # Debug End
         
-        # 🔎 Debug: Print Detailed Input Information
-        input_details = ort_session.get_inputs()[0]
-        print(f"ONNX Input Name: {input_details.name}")
-        print(f"ONNX Input Shape: {input_details.shape}")
-        print(f"ONNX Input Type: {input_details.type}")
-
         # Debug: Input and Output Names
         input_name = ort_session.get_inputs()[0].name
         output_name = ort_session.get_outputs()[0].name
         print(f"ONNX Model Input Name: {input_name}")
         print(f"ONNX Model Output Name: {output_name}")
+        
+        # 🔎 Debug: Print Detailed Input Information
+        input_details = ort_session.get_inputs()[0]
+        print(f"ONNX Input Name: {input_details.name}")
+        print(f"ONNX Input Shape: {input_details.shape}")
+        print(f"ONNX Input Type: {input_details.type}")
     except Exception as e:
         print(f"Error Loading Model: {e}")
 
@@ -67,7 +68,7 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Image Size After Resize: {image.size}")
     
     # Convert image to NumPy array and Normalize to [0, 1]
-    image = np.array(image).astype(np.float32) / 255.0  
+    image = np.array(image) / 255.0  
     print(f"Image Array Shape Before Transpose: {image.shape}")
     print(f"Image Array Values (Sample): {image[0][0]}")
     print(f"Data Type After Normalization: {image.dtype}")
@@ -75,10 +76,10 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     # Handle Grayscale or RGBA images
     if image.ndim == 2:  # Grayscale to RGB
         print("Converting Grayscale to RGB...")
-        image = np.stack([image] * 3, axis=-1).astype(np.float32)
+        image = np.stack([image] * 3, axis=-1)
     elif image.shape[2] == 4:  # RGBA to RGB
         print("Converting RGBA to RGB...")
-        image = image[..., :3].astype(np.float32)
+        image = image[..., :3]
     print(f"Data Type After Handling Channels: {image.dtype}")
 
     # Normalize Using ImageNet Mean & Std
@@ -99,6 +100,14 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
+    # ⚡ Ultimate Fix: Use PyTorch for Final Conversion
+    torch_tensor = torch.tensor(image, dtype=torch.float32)
+    print(f"Torch Tensor Data Type (Check): {torch_tensor.dtype}")
+
+    # Convert Back to NumPy for ONNX
+    image = torch_tensor.numpy()
+    print(f"Final Input Tensor Data Type (After Torch Fix): {image.dtype}")
+
     return image
 
 # Predict using ONNX model
@@ -112,14 +121,9 @@ async def predict(file: UploadFile = File(...)):
         
         # Preprocess the image
         input_tensor = preprocess_image(image)
-
-        # Direct Test: Bypass Preprocessing and Feed Dummy Tensor
-        input_tensor = np.random.randn(1, 3, 224, 224).astype(np.float32)
-        print(f"Dummy Input Tensor Shape: {input_tensor.shape}")
-        print(f"Dummy Input Tensor Data Type: {input_tensor.dtype}")
-
-        # Run inference with Dummy Tensor
-        print("Starting Inference with Dummy Tensor...")
+        
+        # Run inference
+        print("Starting Inference...")
         outputs = ort_session.run(None, {"input": input_tensor})
         
         # Debugging Output Details
