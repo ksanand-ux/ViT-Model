@@ -2,8 +2,8 @@ import io
 import os
 
 import boto3
+import numpy as np
 import onnxruntime as ort
-import torch
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -41,18 +41,9 @@ def load_model():
         print("Model Download Complete. Loading ONNX Model...")
 
         # Load ONNX Model with GPU Support if Available
-        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if torch.cuda.is_available() else ['CPUExecutionProvider']
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
         ort_session = ort.InferenceSession(LOCAL_MODEL_PATH, providers=providers)
         print(f"ONNX Model Loaded & Ready for Inference! Using Providers: {providers}")
-
-        # Debug: Input and Output Names and Types
-        input_name = ort_session.get_inputs()[0].name
-        input_shape = ort_session.get_inputs()[0].shape
-        input_type = ort_session.get_inputs()[0].type
-        output_name = ort_session.get_outputs()[0].name
-        output_type = ort_session.get_outputs()[0].type
-        print(f"ONNX Model Input Name: {input_name}, Type: {input_type}, Shape: {input_shape}")
-        print(f"ONNX Model Output Name: {output_name}, Type: {output_type}")
 
     except Exception as e:
         print(f"Error Loading Model: {e}")
@@ -61,28 +52,34 @@ def load_model():
 # Call the function to load the model at startup
 load_model()
 
-def preprocess_image(image_bytes: bytes) -> torch.Tensor:
+def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     print("Preprocessing Image...")
 
-    # 🔥 Directly Use PyTorch to Load Image
-    # Completely Bypass NumPy to Avoid Float64
+    # 🔥 Bypass NumPy and PyTorch - Direct Conversion using ONNX Runtime
+    # Load and Convert to RGB
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
-    image_tensor = torch.frombuffer(image.tobytes(), dtype=torch.uint8)  # Load as uint8 to prevent float64
-    image_tensor = image_tensor.view(224, 224, 3).permute(2, 0, 1).unsqueeze(0)  # CHW and add batch dimension
 
-    # Convert to float32 and Normalize
-    image_tensor = image_tensor.to(torch.float32) / 255.0  # Convert to float32 here
+    # Directly Create a Float32 NumPy Array
+    np_image = np.array(image, dtype=np.float32) / 255.0  # Float32 from the start
+    np_image = np_image.transpose(2, 0, 1)  # Transpose to CHW format
 
     # Normalize Using ImageNet Mean & Std
-    mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
-    image_tensor = (image_tensor - mean) / std
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
+    np_image = (np_image - mean) / std
 
-    print(f"Final Input Tensor Shape: {image_tensor.shape}")
-    print(f"Final Input Tensor Data Type: {image_tensor.dtype}")
+    # Add Batch Dimension
+    input_tensor = np.expand_dims(np_image, axis=0)
 
-    return image_tensor
+    # Debugging Information
+    print(f"Final Input Tensor Shape: {input_tensor.shape}")
+    print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
+    print(f"Final Input Tensor Values (Sample): {input_tensor.flatten()[:10]}")
+
+    # 🔥 Directly Use OrtValue to Bypass NumPy and PyTorch
+    ort_value = ort.OrtValue.ortvalue_from_numpy(input_tensor, 'cpu')
+    return ort_value
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
@@ -90,13 +87,11 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
-        # 🔥 Directly Use OrtValue to Bypass NumPy
         input_name = ort_session.get_inputs()[0].name
-        ort_inputs = {input_name: input_tensor.cpu().numpy()}
-        outputs = ort_session.run(None, ort_inputs)
+        outputs = ort_session.run(None, {input_name: input_tensor.numpy()})
 
         output_tensor = outputs[0]
-        predicted_class_index = torch.argmax(torch.tensor(output_tensor), dim=1).item()
+        predicted_class_index = np.argmax(output_tensor, axis=1)[0]
         predicted_class_name = CLASS_NAMES[predicted_class_index]
         print(f"Predicted Class: {predicted_class_name}")
 
