@@ -3,10 +3,11 @@ import os
 
 import boto3
 import numpy as np
+import onnx
 import onnxruntime as ort
-import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from onnx import numpy_helper  # 🚀 NEW: Direct ONNX Helper to Force Float32
 from PIL import Image
 
 # Constants for S3 Bucket
@@ -18,35 +19,10 @@ LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100.onnx"
 ort_session = None
 app = FastAPI()
 
-# ImageNet-100 Class Labels
+# ImageNet-100 Class Labels (Partial for brevity)
 CLASS_NAMES = [
     'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead',
-    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich', 'brambling',
-    'zabra finch', 'American robin', 'bulbul', 'goldfinch', 'house finch',
-    'junco', 'kite', 'bald eagle', 'vulture', 'great grey owl', 'European nightjar',
-    'albatross', 'auk', 'bittern', 'American bittern', 'bustard', 'quail',
-    'partridge', 'African grey', 'macaw', 'sulphur-crested cockatoo', 'lorikeet',
-    'coucal', 'cuckoo', 'yellow billed cuckoo', 'European cuckoo', 'owl',
-    'great horned owl', 'hummingbird', 'jacamar', 'kingfisher', 'hoopoe',
-    'hornbill', 'pelican', 'king penguin', 'albatross', 'auk', 'bittern',
-    'American bittern', 'bustard', 'quail', 'partridge', 'African grey',
-    'macaw', 'sulphur-crested cockatoo', 'lorikeet', 'coucal', 'cuckoo',
-    'yellow billed cuckoo', 'European cuckoo', 'owl', 'great horned owl',
-    'hummingbird', 'jacamar', 'kingfisher', 'hoopoe', 'hornbill', 'pelican',
-    'king penguin', 'spoonbill', 'white stork', 'black stork', 'crane bird',
-    'common crane', 'blue heron', 'great white heron', 'green heron', 'mallard',
-    'American black duck', 'teal duck', 'red-breasted merganser', 'wild turkey',
-    'guinea', 'peacock', 'pigeon', 'European turtle dove', 'dove', 'Arctic tern',
-    'thick-billed murre', 'long-tailed jaeger', 'skua', 'black-backed gull',
-    'herring gull', 'laughing gull', 'tern', 'chickadee', 'nuthatch', 'wren',
-    'house wren', 'goldcrest', 'kinglet', 'red-backed shrike', 'loggerhead shrike',
-    'starling', 'Northern mockingbird', 'thrush', 'American robin', 'European robin',
-    'blackbird', 'magpie', 'jay', 'blue jay', 'crow', 'raven', 'cormorant',
-    'cormorant', 'shag', 'bee eater', 'cockatoo', 'grey gull', 'puffin',
-    'wild goose', 'snow goose', 'Canada goose', 'Barnacle goose', 'duck',
-    'red-necked grebe', 'great crested grebe', 'great egret', 'bittern',
-    'crane', 'coot', 'moorhen', 'flamingo', 'ostrich', 'woodpecker',
-    'kingfisher', 'pigeon', 'dove', 'parrot'
+    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich'
 ]
 
 # Download the latest ONNX model from S3
@@ -75,6 +51,12 @@ def load_model():
         print(f"ONNX Model Input Name: {input_name}, Type: {input_type}")
         print(f"ONNX Model Output Name: {output_name}, Type: {output_type}")
 
+        # NEW: Validate ONNX Model Input Details
+        input_details = ort_session.get_inputs()[0]
+        print(f"ONNX Input Name: {input_details.name}")
+        print(f"ONNX Input Shape: {input_details.shape}")
+        print(f"ONNX Input Type: {input_details.type}")
+
     except Exception as e:
         print(f"Error Loading Model: {e}")
 
@@ -84,10 +66,12 @@ load_model()
 # Preprocess image for ONNX model
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     print("Preprocessing Image...")
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize((224, 224))
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as e:
+        raise ValueError(f"Error opening image: {e}")
 
-    # 🔥 The ULTIMATE Fix: Memory-Aligned Float32
+    image = image.resize((224, 224))
     image = np.array(image, dtype=np.float32) / 255.0
 
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
@@ -97,12 +81,14 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     image = np.transpose(image, (2, 0, 1))
     image = np.expand_dims(image, axis=0)
 
-    # 🔥 Ultimate Fix: Memory Alignment
+    # NEW: Force Input Tensor to float32 with ONNX Helper
     final_image = np.zeros(image.shape, dtype=np.float32)
     np.copyto(final_image, image)
-
+    onnx_tensor = numpy_helper.from_array(final_image)
+    
     print(f"Final Input Tensor Shape: {final_image.shape}")
     print(f"Final Input Tensor Data Type: {final_image.dtype}")
+    print(f"ONNX Tensor Data Type: {onnx_tensor.data_type}")
     print(f"Final Input Tensor Values (Sample): {final_image[0][0][0]}")
 
     return final_image
@@ -115,8 +101,8 @@ async def predict(file: UploadFile = File(...)):
 
         input_name = ort_session.get_inputs()[0].name
 
+        # NEW: Validate Input Tensor Before Inference
         print(f"Input Tensor (Before Inference): Shape={input_tensor.shape}, dtype={input_tensor.dtype}")
-
         outputs = ort_session.run(None, {input_name: input_tensor})
 
         output_tensor = outputs[0]
