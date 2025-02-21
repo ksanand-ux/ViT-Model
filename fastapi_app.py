@@ -3,10 +3,12 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
-import torch  # 🚀 New Import: PyTorch for guaranteed float32 handling
+import torch
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from onnx import \
+    numpy_helper  # 🚀 New Import: ONNX's own helper for input tensor creation
 from PIL import Image
 
 # Constants for S3 Bucket
@@ -100,15 +102,12 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
-    # ⚡ Ultimate Fix: Use PyTorch for Final Conversion
-    torch_tensor = torch.tensor(image, dtype=torch.float32)
-    print(f"Torch Tensor Data Type (Check): {torch_tensor.dtype}")
+    # ⚡ Ultimate Fix: Use ONNX numpy_helper
+    # This guarantees the input is exactly what ONNX expects
+    input_tensor = numpy_helper.from_array(image.astype(np.float32))
+    print(f"ONNX Helper Tensor Data Type (Final Fix): {input_tensor.data_type}")
 
-    # Convert Back to NumPy for ONNX
-    image = torch_tensor.numpy()
-    print(f"Final Input Tensor Data Type (After Torch Fix): {image.dtype}")
-
-    return image
+    return image.astype(np.float32)  # Make sure it's still float32 for safety
 
 # Predict using ONNX model
 @app.post("/predict/")
