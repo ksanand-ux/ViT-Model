@@ -109,6 +109,10 @@ def preprocess_image(image: Image.Image) -> np.ndarray:
     print(f"Final Input Tensor Data Type: {image.dtype}")
     print(f"Final Input Tensor Values (Sample): {image[0][0][0]}")
 
+    # 🔥 Critical Fix: Convert to float32
+    image = image.astype(np.float32)
+    print(f"Final Input Tensor Data Type (Fixed): {image.dtype}")
+
     return image
 
 # Predict using ONNX model
