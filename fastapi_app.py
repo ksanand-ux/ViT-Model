@@ -12,8 +12,8 @@ from PIL import Image
 
 # Constants for S3 Bucket
 BUCKET_NAME = "e-see-vit-model"
-MODEL_KEY = "models/fine_tuned_vit_imagenet100.onnx"
-LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100.onnx"
+MODEL_KEY = "models/fine_tuned_vit_imagenet100_float64.onnx"
+LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100_float64.onnx"
 
 # Global variable for ONNX session
 ort_session = None
@@ -84,8 +84,8 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     np_image = (np_image - mean) / std
     print(f"Image Array After Normalization (Sample): {np_image[0][0][:5]}")
 
-    # Final Conversion to float32 Just Before Inference
-    input_tensor = np_image[np.newaxis, :].astype(np.float32)
+    # Final Conversion to float64 Just Before Inference
+    input_tensor = np_image[np.newaxis, :].astype(np.float64)
     print(f"Final Input Tensor Shape: {input_tensor.shape}")
     print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
     print(f"Final Input Tensor Values (Sample): {input_tensor[0][0][0][:5]}")
