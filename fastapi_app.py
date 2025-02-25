@@ -39,10 +39,22 @@ def load_model():
             download_model()
         print("Model Download Complete. Loading ONNX Model...")
 
-        # Load ONNX Model with GPU Support if Available
+        # Load ONNX Model with Verbose Logging for Debugging
+        options = ort.SessionOptions()
+        options.log_severity_level = 0  # Enable verbose logging
+        
         providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
-        ort_session = ort.InferenceSession(LOCAL_MODEL_PATH, providers=providers)
+        ort_session = ort.InferenceSession(LOCAL_MODEL_PATH, options, providers=providers)
         print(f"ONNX Model Loaded & Ready for Inference! Using Providers: {providers}")
+
+        # Debugging Input and Output Details
+        input_name = ort_session.get_inputs()[0].name
+        input_shape = ort_session.get_inputs()[0].shape
+        input_type = ort_session.get_inputs()[0].type
+        output_name = ort_session.get_outputs()[0].name
+        output_type = ort_session.get_outputs()[0].type
+        print(f"ONNX Model Input Name: {input_name}, Type: {input_type}, Shape: {input_shape}")
+        print(f"ONNX Model Output Name: {output_name}, Type: {output_type}")
 
     except Exception as e:
         print(f"Error Loading Model: {e}")
@@ -57,25 +69,32 @@ def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     # Load and Convert to RGB
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
+    print(f"Image Size After Resize: {image.size}")
 
     # Convert Image to Float32 Array Directly
-    np_image = np.asarray(image, dtype=np.float32) / 255.0  # Enforce float32 from the start
-    np_image = np_image.transpose(2, 0, 1)  # Transpose to CHW format
+    np_image = np.asarray(image, dtype=np.float32) / 255.0
+    print(f"Image Array Shape Before Transpose: {np_image.shape}")
+    print(f"Image Array Values (Sample): {np_image[0][0]}")
 
     # Normalize Using ImageNet Mean & Std
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
     np_image = (np_image - mean) / std
+    print(f"Image Array After Normalization (Sample): {np_image[0][0]}")
+
+    # Transpose to CHW Format
+    np_image = np_image.transpose(2, 0, 1)
+    print(f"Image Array Shape After Transpose: {np_image.shape}")
 
     # Add Batch Dimension
-    input_tensor = np.expand_dims(np_image, axis=0).astype(np.float32)
-
-    # Debugging Information
+    input_tensor = np.expand_dims(np_image, axis=0)
     print(f"Final Input Tensor Shape: {input_tensor.shape}")
     print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
+    
+    # Create OrtValue with Explicit float32 Specification
+    ort_value = ort.OrtValue.ortvalue_from_numpy(input_tensor.astype(np.float32), 'cpu')
+    print(f"OrtValue Data Type: {ort_value.data_type()}")
 
-    # 🔥 Directly Use OrtValue with Explicit float32 Specification
-    ort_value = ort.OrtValue.ortvalue_from_numpy(input_tensor, 'cpu')
     return ort_value
 
 @app.post("/predict/")
