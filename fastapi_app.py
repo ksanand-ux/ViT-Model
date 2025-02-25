@@ -4,6 +4,8 @@ import os
 import boto3
 import numpy as np
 import onnxruntime as ort
+import torch
+import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
@@ -39,15 +41,11 @@ def load_model():
             download_model()
         print("Model Download Complete. Loading ONNX Model...")
 
-        # Load ONNX Model with Verbose Logging for Debugging
-        options = ort.SessionOptions()
-        options.log_severity_level = 0  # Enable verbose logging
-        
-        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
-        ort_session = ort.InferenceSession(LOCAL_MODEL_PATH, options, providers=providers)
-        print(f"ONNX Model Loaded & Ready for Inference! Using Providers: {providers}")
+        # Load ONNX Model
+        ort_session = ort.InferenceSession(LOCAL_MODEL_PATH)
+        print("ONNX Model Loaded & Ready for Inference!")
 
-        # Debugging Input and Output Details
+        # Debug: Input and Output Names and Types
         input_name = ort_session.get_inputs()[0].name
         input_shape = ort_session.get_inputs()[0].shape
         input_type = ort_session.get_inputs()[0].type
@@ -63,7 +61,7 @@ def load_model():
 # Call the function to load the model at startup
 load_model()
 
-def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
+def preprocess_image(image_bytes: bytes) -> np.ndarray:
     print("Preprocessing Image...")
 
     # Load and Convert to RGB
@@ -71,31 +69,39 @@ def preprocess_image(image_bytes: bytes) -> ort.OrtValue:
     image = image.resize((224, 224))
     print(f"Image Size After Resize: {image.size}")
 
-    # Convert Image to Float32 Array Directly
-    np_image = np.asarray(image, dtype=np.float32) / 255.0
+    # Direct Tensor Creation Without Conversion
+    np_image = np.array(image) / 255.0
     print(f"Image Array Shape Before Transpose: {np_image.shape}")
     print(f"Image Array Values (Sample): {np_image[0][0]}")
 
-    # Normalize Using ImageNet Mean & Std
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
-    np_image = (np_image - mean) / std
-    print(f"Image Array After Normalization (Sample): {np_image[0][0]}")
-
-    # Transpose to CHW Format
+    # Transpose to CHW format
     np_image = np_image.transpose(2, 0, 1)
     print(f"Image Array Shape After Transpose: {np_image.shape}")
 
-    # Add Batch Dimension
-    input_tensor = np.expand_dims(np_image, axis=0)
+    # Normalize Using ImageNet Mean & Std
+    mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+    std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+    np_image = (np_image - mean) / std
+    print(f"Image Array After Normalization (Sample): {np_image[0][0][:5]}")
+
+    # Final Conversion to float32 Just Before Inference
+    input_tensor = np_image[np.newaxis, :].astype(np.float32)
     print(f"Final Input Tensor Shape: {input_tensor.shape}")
     print(f"Final Input Tensor Data Type: {input_tensor.dtype}")
-    
-    # Create OrtValue with Explicit float32 Specification
-    ort_value = ort.OrtValue.ortvalue_from_numpy(input_tensor.astype(np.float32), 'cpu')
-    print(f"OrtValue Data Type: {ort_value.data_type()}")
+    print(f"Final Input Tensor Values (Sample): {input_tensor[0][0][0][:5]}")
 
-    return ort_value
+    return input_tensor
+
+def validate_input_shape(input_tensor: np.ndarray):
+    """ Validate if input tensor shape matches model's input shape """
+    expected_shape = ort_session.get_inputs()[0].shape
+    actual_shape = input_tensor.shape
+    
+    if expected_shape[0] is None:
+        expected_shape[0] = actual_shape[0]  # Batch size can be dynamic
+        
+    if actual_shape != tuple(expected_shape):
+        raise ValueError(f"Input shape mismatch! Expected: {expected_shape}, Got: {actual_shape}")
 
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
@@ -103,8 +109,12 @@ async def predict(file: UploadFile = File(...)):
         image_bytes = await file.read()
         input_tensor = preprocess_image(image_bytes)
 
+        # Shape Validation
+        validate_input_shape(input_tensor)
+        print("Input Shape Validated.")
+
         input_name = ort_session.get_inputs()[0].name
-        outputs = ort_session.run(None, {input_name: input_tensor.numpy()})
+        outputs = ort_session.run(None, {input_name: input_tensor})
 
         output_tensor = outputs[0]
         predicted_class_index = np.argmax(output_tensor, axis=1)[0]
@@ -122,5 +132,4 @@ def health_check():
     return JSONResponse({"status": "healthy"})
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
