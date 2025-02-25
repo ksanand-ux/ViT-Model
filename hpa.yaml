@@ -15,4 +15,10 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 50
+        averageUtilization: 60   # ✅ Increased to Balance CPU Utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70  # ✅ Added Memory-Based Scaling
