@@ -14,6 +14,38 @@ spec:
     spec:
       containers:
       - name: vit-api
-        image: 087735574692.dkr.ecr.us-east-1.amazonaws.com/vit-api:latest  # Ensure it's correct
+        image: 087735574692.dkr.ecr.us-east-1.amazonaws.com/vit-torchscript:latest  # ✅ Updated Image Name
         ports:
         - containerPort: 8080
+        resources:  # ✅ Resource Requests and Limits
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        env:  # ✅ Environment Variables (Add more if needed)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-secrets
+              key: aws_access_key_id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-secrets
+              key: aws_secret_access_key
+        readinessProbe:  # ✅ Readiness Probe
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:  # ✅ Liveness Probe
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
