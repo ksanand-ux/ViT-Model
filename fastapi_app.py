@@ -12,8 +12,8 @@ from PIL import Image
 
 # Constants for S3 Bucket
 BUCKET_NAME = "e-see-vit-model"
-MODEL_KEY = "models/fine_tuned_vit_imagenet100_float64.onnx"
-LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100_float64.onnx"
+MODEL_KEY = "models/fine_tuned_vit_imagenet100_float64_fixed.onnx"
+LOCAL_MODEL_PATH = "fine_tuned_vit_imagenet100_float64_fixed.onnx"
 
 # Global variable for ONNX session
 ort_session = None
