@@ -27,4 +27,4 @@ typing_extensions==4.12.2
 
 # Caching and Server
 redis==5.0.0
-gunicorn==21.2.0  # Make sure gunicorn is listed here
+gunicorn==21.2.0  # Ensure Gunicorn is included

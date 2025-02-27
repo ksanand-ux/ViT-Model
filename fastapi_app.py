@@ -25,6 +25,26 @@ redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 model_cache = None
 app = FastAPI()
 
+# ImageNet-100 Class Labels (Full List)
+CLASS_NAMES = [
+    "tench", "goldfish", "great_white_shark", "tiger_shark", "hammerhead",
+    "electric_ray", "stingray", "cock", "hen", "ostrich", "brambling",
+    "goldfinch", "house_finch", "junco", "indigo_bunting", "robin",
+    "bulbul", "jay", "magpie", "chickadee", "water_ouzel", "kite",
+    "bald_eagle", "vulture", "great_grey_owl", "fire_salamander",
+    "smooth_newt", "tailed_frog", "american_alligator", "green_iguana",
+    "african_chameleon", "komodo_dragon", "african_crocodile",
+    "american_chameleon", "agama", "frilled_lizard", "alligator_lizard",
+    "gila_monster", "green_lizard", "african_chameleon", "komodo_dragon",
+    "triceratops", "thunder_snake", "ringneck_snake", "hognose_snake",
+    "green_snake", "king_snake", "garter_snake", "water_snake",
+    "vine_snake", "night_snake", "boa_constrictor", "rock_python",
+    "indian_cobra", "green_mamba", "sea_snake", "horned_viper",
+    "diamondback", "sidewinder", "trilobite", "harvestman", "scorpion",
+    "black_and_gold_garden_spider", "barn_spider", "garden_spider",
+    "black_widow", "tarantula", "wolf_spider", "tick", "centipede"
+]
+
 # Check Redis Connection
 try:
     redis_client.ping()
@@ -82,13 +102,22 @@ async def predict(file: UploadFile = File(...)):
         
         predicted_class_index = torch.argmax(outputs, dim=1).item()
         predicted_class_name = CLASS_NAMES[predicted_class_index]
+        print(f"Predicted Class: {predicted_class_name}")
 
-        # Store in Cache
-        redis_client.set(cache_key, predicted_class_name)
-        print(f"[CACHE] Cached Prediction for Key: {cache_key}, Value: {predicted_class_name}")
+        # Store in Cache with Expiration (1 Hour)
+        redis_client.set(cache_key, predicted_class_name, ex=3600)
 
         return JSONResponse({"predicted_class": predicted_class_name})
 
     except Exception as e:
         print(f"Error During Inference: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction Error: {e}")
+
+@app.get("/health")
+def health_check():
+    return JSONResponse({"status": "healthy"})
+
+if __name__ == "__main__":
+    import multiprocessing
+    workers = (2 * multiprocessing.cpu_count()) + 1
+    uvicorn.run(app, host="0.0.0.0", port=8080, workers=workers)
