@@ -42,7 +42,14 @@ CLASS_NAMES = [
     "indian_cobra", "green_mamba", "sea_snake", "horned_viper",
     "diamondback", "sidewinder", "trilobite", "harvestman", "scorpion",
     "black_and_gold_garden_spider", "barn_spider", "garden_spider",
-    "black_widow", "tarantula", "wolf_spider", "tick", "centipede"
+    "black_widow", "tarantula", "wolf_spider", "tick", "centipede",
+    "black_grouse", "ptarmigan", "ruffed_grouse", "prairie_chicken",
+    "peacock", "quail", "partridge", "african_grey", "macaw", "sulphur_crested_cockatoo",
+    "lorikeet", "coucal", "bee_eater", "hornbill", "hummingbird",
+    "jacamar", "toucan", "drake", "red_breasted_merganser", "goose",
+    "black_swan", "white_stork", "black_stork", "spoonbill", "flamingo",
+    "little_blue_heron", "bittern", "crane", "limpkin", "american_coot",
+    "bustard", "ruddy_turnstone", "red_backed_sandpiper", "redshank"
 ]
 
 # Check Redis Connection
@@ -80,6 +87,19 @@ def generate_cache_key(image_bytes: bytes) -> str:
     print(f"[CACHE] Generated Cache Key: {cache_key}")
     return cache_key
 
+# ✅ Fix: Ensure preprocess_image is properly defined and in scope
+def preprocess_image(image_bytes: bytes) -> torch.Tensor:
+    print("Preprocessing Image...")
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image = image.resize((224, 224))
+    np_image = np.array(image) / 255.0
+    np_image = np_image.transpose(2, 0, 1)
+    mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+    std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+    np_image = (np_image - mean) / std
+    input_tensor = torch.tensor(np_image, dtype=torch.float32).unsqueeze(0)
+    return input_tensor
+
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
     try:
@@ -102,10 +122,11 @@ async def predict(file: UploadFile = File(...)):
         
         predicted_class_index = torch.argmax(outputs, dim=1).item()
         predicted_class_name = CLASS_NAMES[predicted_class_index]
-        print(f"Predicted Class: {predicted_class_name}")
+        print(f"[PREDICTION] Predicted Class: {predicted_class_name}")
 
         # Store in Cache with Expiration (1 Hour)
         redis_client.set(cache_key, predicted_class_name, ex=3600)
+        print(f"[CACHE] Cached Prediction for Key: {cache_key}, Value: {predicted_class_name}")
 
         return JSONResponse({"predicted_class": predicted_class_name})
 
@@ -119,5 +140,5 @@ def health_check():
 
 if __name__ == "__main__":
     import multiprocessing
-    workers = (2 * multiprocessing.cpu_count()) + 1
+    workers = 1  # Set to 1 for testing stability
     uvicorn.run(app, host="0.0.0.0", port=8080, workers=workers)
