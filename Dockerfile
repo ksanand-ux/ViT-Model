@@ -1,5 +1,6 @@
-# Base Image
-FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+# === Stage 1: Build Dependencies ===
+# Base Image for Building
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime as builder
 
 # Set Working Directory
 WORKDIR /app
@@ -11,8 +12,15 @@ COPY . /app
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Install Redis for Caching
-RUN pip install redis
+# === Stage 2: Final Image ===
+# Base Image for Production
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+
+# Set Working Directory
+WORKDIR /app
+
+# Copy Files and Dependencies from Builder
+COPY --from=builder /app /app
 
 # Expose Port for FastAPI
 EXPOSE 8080

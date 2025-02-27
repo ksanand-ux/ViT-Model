@@ -25,33 +25,6 @@ redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 model_cache = None
 app = FastAPI()
 
-# ImageNet-100 Class Labels (Full List)
-CLASS_NAMES = [
-    "tench", "goldfish", "great_white_shark", "tiger_shark", "hammerhead",
-    "electric_ray", "stingray", "cock", "hen", "ostrich", "brambling",
-    "goldfinch", "house_finch", "junco", "indigo_bunting", "robin",
-    "bulbul", "jay", "magpie", "chickadee", "water_ouzel", "kite",
-    "bald_eagle", "vulture", "great_grey_owl", "fire_salamander",
-    "smooth_newt", "tailed_frog", "american_alligator", "green_iguana",
-    "african_chameleon", "komodo_dragon", "african_crocodile",
-    "american_chameleon", "agama", "frilled_lizard", "alligator_lizard",
-    "gila_monster", "green_lizard", "african_chameleon", "komodo_dragon",
-    "triceratops", "thunder_snake", "ringneck_snake", "hognose_snake",
-    "green_snake", "king_snake", "garter_snake", "water_snake",
-    "vine_snake", "night_snake", "boa_constrictor", "rock_python",
-    "indian_cobra", "green_mamba", "sea_snake", "horned_viper",
-    "diamondback", "sidewinder", "trilobite", "harvestman", "scorpion",
-    "black_and_gold_garden_spider", "barn_spider", "garden_spider",
-    "black_widow", "tarantula", "wolf_spider", "tick", "centipede",
-    "black_grouse", "ptarmigan", "ruffed_grouse", "prairie_chicken",
-    "peacock", "quail", "partridge", "african_grey", "macaw", "sulphur_crested_cockatoo",
-    "lorikeet", "coucal", "bee_eater", "hornbill", "hummingbird",
-    "jacamar", "toucan", "drake", "red_breasted_merganser", "goose",
-    "black_swan", "white_stork", "black_stork", "spoonbill", "flamingo",
-    "little_blue_heron", "bittern", "crane", "limpkin", "american_coot",
-    "bustard", "ruddy_turnstone", "red_backed_sandpiper", "redshank"
-]
-
 # Check Redis Connection
 try:
     redis_client.ping()
@@ -87,33 +60,6 @@ def generate_cache_key(image_bytes: bytes) -> str:
     print(f"[CACHE] Generated Cache Key: {cache_key}")
     return cache_key
 
-def preprocess_image(image_bytes: bytes) -> torch.Tensor:
-    print("Preprocessing Image...")
-
-    # Load and Convert to RGB
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize((224, 224))
-    print(f"Image Size After Resize: {image.size}")
-
-    # Direct Tensor Creation Without Conversion
-    np_image = np.array(image) / 255.0
-    print(f"Image Array Shape Before Transpose: {np_image.shape}")
-
-    # Transpose to CHW format
-    np_image = np_image.transpose(2, 0, 1)
-    print(f"Image Array Shape After Transpose: {np_image.shape}")
-
-    # Normalize Using ImageNet Mean & Std
-    mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
-    std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
-    np_image = (np_image - mean) / std
-
-    # Final Conversion to float32 Just Before Inference
-    input_tensor = torch.tensor(np_image, dtype=torch.float32).unsqueeze(0)
-    print(f"Final Input Tensor Shape: {input_tensor.shape}")
-
-    return input_tensor
-
 @app.post("/predict/")
 async def predict(file: UploadFile = File(...)):
     try:
@@ -136,7 +82,6 @@ async def predict(file: UploadFile = File(...)):
         
         predicted_class_index = torch.argmax(outputs, dim=1).item()
         predicted_class_name = CLASS_NAMES[predicted_class_index]
-        print(f"Predicted Class: {predicted_class_name}")
 
         # Store in Cache
         redis_client.set(cache_key, predicted_class_name)
@@ -147,12 +92,3 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error During Inference: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction Error: {e}")
-
-@app.get("/health")
-def health_check():
-    return JSONResponse({"status": "healthy"})
-
-if __name__ == "__main__":
-    import multiprocessing
-    workers = (2 * multiprocessing.cpu_count()) + 1
-    uvicorn.run(app, host="0.0.0.0", port=8080, workers=workers)

@@ -1,26 +1,15 @@
-# Essential for FastAPI Web Framework
 fastapi==0.115.8
 uvicorn==0.34.0
-
-# For Image Processing and Handling
 pillow==11.1.0
-
-# AWS S3 Integration
 boto3==1.36.16
 botocore==1.36.16
 s3transfer==0.11.2
-
-# TorchScript and Model Inference
 torch==2.6.0
 torchvision==0.21.0
-triton==3.2.0  # Needed for TorchScript GPU acceleration
-
-# Data Handling and Processing
+triton==3.2.0
 numpy==2.2.2
-
-# API and HTTP Requests
 requests==2.32.3
 python-multipart
-
-# Essential Utilities
 typing_extensions==4.12.2
+redis==5.0.0  # ✅ Added Redis
+gunicorn==21.2.0  # ✅ Added Gunicorn
