@@ -7,12 +7,15 @@ WORKDIR /app
 # Copy Files
 COPY . /app
 
-# Install Dependencies
+# Install Dependencies from requirements.txt
 RUN pip install --upgrade pip && \
-    pip install torch torchvision boto3 fastapi uvicorn pillow numpy
+    pip install -r requirements.txt
 
-# Expose Port
+# Install Redis for Caching
+RUN pip install redis
+
+# Expose Port for FastAPI
 EXPOSE 8080
 
-# Start FastAPI App using Gunicorn
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "fastapi_app:app", "--bind", "0.0.0.0:8080"]
+# Start FastAPI App using Gunicorn with Optimized Workers
+CMD ["gunicorn", "fastapi_app:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--workers", "4"]
