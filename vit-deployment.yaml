@@ -2,8 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vit-api
+  labels:
+    app: vit-api
 spec:
-  replicas: 2
+  replicas: 2  # For high availability and load balancing
   selector:
     matchLabels:
       app: vit-api
@@ -18,14 +20,14 @@ spec:
         imagePullPolicy: Always  # Ensures it always pulls the latest version
         ports:
         - containerPort: 8080
-        resources:
+        resources:  # Resource Requests and Limits
           requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
             memory: "1Gi"
             cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "1"
-        env:  # AWS Credentials and Redis Configuration
+        env:  # Environment Variables for Redis and AWS
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -37,7 +39,7 @@ spec:
               name: aws-secrets
               key: aws_secret_access_key
         - name: REDIS_HOST
-          value: "redis-service"  # Change if your Redis service name is different
+          value: "redis-service"
         - name: REDIS_PORT
           value: "6379"
         readinessProbe:  # Readiness Probe
@@ -60,10 +62,9 @@ kind: Service
 metadata:
   name: vit-api
 spec:
-  type: LoadBalancer
+  type: LoadBalancer  # Expose via LoadBalancer for external access
   ports:
-  - port: 80
-    targetPort: 8080
-    protocol: TCP
+    - port: 80
+      targetPort: 8080
   selector:
     app: vit-api
