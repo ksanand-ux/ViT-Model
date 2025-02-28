@@ -20,17 +20,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Configure AWS Credentials
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.EKS_REGION }}
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      # Login to Amazon ECR
-      - name: Login to Amazon ECR
-        run: |
-          aws ecr get-login-password --region ${{ secrets.EKS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+      # Log in to Amazon ECR using GitHub Action
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          region: ${{ secrets.EKS_REGION }}
 
       # Build Docker Image
       - name: Build Docker Image
@@ -47,12 +45,18 @@ jobs:
         run: |
           docker push ${{ secrets.ECR_REPOSITORY }}:latest
 
+      # Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.EKS_REGION }}
+
       # Update Kubernetes Deployment on EKS
       - name: Deploy to EKS
-        env:
-          KUBECONFIG: /tmp/kubeconfig
         run: |
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.EKS_REGION }}
+          kubectl apply -f vit-deployment.yaml
           kubectl set image deployment/vit-api vit-api=${{ secrets.ECR_REPOSITORY }}:latest
           kubectl rollout restart deployment vit-api
           kubectl rollout status deployment vit-api
