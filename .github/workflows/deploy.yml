@@ -1,0 +1,58 @@
+name: Deploy ViT to EKS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build, Push, and Deploy to EKS
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      # Checkout the Repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.EKS_REGION }}
+
+      # Login to Amazon ECR
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.EKS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+
+      # Build Docker Image
+      - name: Build Docker Image
+        run: |
+          docker build -t vit-torchscript:latest .
+
+      # Tag Docker Image
+      - name: Tag Docker Image
+        run: |
+          docker tag vit-torchscript:latest ${{ secrets.ECR_REPOSITORY }}:latest
+
+      # Push Docker Image to ECR
+      - name: Push Docker Image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+
+      # Update Kubernetes Deployment on EKS
+      - name: Deploy to EKS
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.EKS_REGION }}
+          kubectl set image deployment/vit-api vit-api=${{ secrets.ECR_REPOSITORY }}:latest
+          kubectl rollout restart deployment vit-api
+          kubectl rollout status deployment vit-api
