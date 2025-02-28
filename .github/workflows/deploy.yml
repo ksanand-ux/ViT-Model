@@ -13,50 +13,57 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
+      id-token: write # Required for OIDC Authentication
 
     steps:
       # Checkout the Repository
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      # Log in to Amazon ECR using GitHub Action
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          region: ${{ secrets.EKS_REGION }}
-
-      # Build Docker Image
-      - name: Build Docker Image
-        run: |
-          docker build -t vit-torchscript:latest .
-
-      # Tag Docker Image
-      - name: Tag Docker Image
-        run: |
-          docker tag vit-torchscript:latest ${{ secrets.ECR_REPOSITORY }}:latest
-
-      # Push Docker Image to ECR
-      - name: Push Docker Image to ECR
-        run: |
-          docker push ${{ secrets.ECR_REPOSITORY }}:latest
-
-      # Configure AWS Credentials
+      # Configure AWS Credentials using OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.EKS_REGION }}
 
+      # Set up Docker Buildx (Ensures compatibility and faster builds)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Log in to Amazon ECR using AWS CLI (No Secrets Required)
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.EKS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+
+      # Build Docker Image with Detailed Logs
+      - name: Build Docker Image
+        run: |
+          echo "Building Docker image..."
+          docker build -t vit-torchscript:latest .
+          echo "Docker image build complete."
+
+      # Tag Docker Image
+      - name: Tag Docker Image
+        run: |
+          echo "Tagging Docker image..."
+          docker tag vit-torchscript:latest ${{ secrets.ECR_REPOSITORY }}:latest
+          echo "Docker image tagged successfully."
+
+      # Push Docker Image to ECR
+      - name: Push Docker Image to ECR
+        run: |
+          echo "Pushing Docker image to ECR..."
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          echo "Docker image pushed to ECR successfully."
+
       # Update Kubernetes Deployment on EKS
       - name: Deploy to EKS
         run: |
+          echo "Updating EKS kubeconfig..."
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.EKS_REGION }}
-          kubectl apply -f vit-deployment.yaml
-          kubectl set image deployment/vit-api vit-api=${{ secrets.ECR_REPOSITORY }}:latest
+          echo "Updating Kubernetes deployment..."
+          kubectl set image deployment/vit-api vit-api=${{ secrets.ECR_REPOSITORY }}:latest --record
           kubectl rollout restart deployment vit-api
           kubectl rollout status deployment vit-api
+          echo "Deployment to EKS completed successfully."
