@@ -6,25 +6,49 @@ on:
       - main
 
 jobs:
-  debug-iam:
+  debug_iam:
     name: Debug IAM Role in GitHub Actions
     runs-on: ubuntu-latest
+
     permissions:
-      id-token: write
+      id-token: write # Ensure OIDC authentication is allowed
+      contents: read
+
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.EKS_REGION }}
+
+      - name: Verify AWS Credentials
+        run: |
+          echo "Checking AWS Credentials..."
+          aws configure list
+
       - name: Debug AWS IAM Role
-        run: aws sts get-caller-identity
+        run: |
+          echo "Checking IAM Role..."
+          aws sts get-caller-identity
 
-      - name: Check AWS CLI Version
-        run: aws --version
-
-      - name: Ensure GitHub Actions has AWS Permissions
-        run: aws eks list-clusters
+      - name: Force Stop If IAM Role is Wrong
+        run: |
+          IAM_ROLE=$(aws sts get-caller-identity --query "Arn" --output text)
+          if [[ "$IAM_ROLE" != *"GitHubActionsEKSRole"* ]]; then
+            echo "ERROR: GitHub Actions is not assuming the correct role!"
+            exit 1
+          else
+            echo "IAM Role Verified: $IAM_ROLE"
+          fi
 
   deploy:
+    needs: debug_iam # Ensures IAM debugging runs before deployment
     name: Build, Push, and Deploy to EKS
     runs-on: ubuntu-latest
-    needs: debug-iam # ✅ Ensures IAM role check runs first
+
     permissions:
       contents: read
       packages: write
@@ -40,18 +64,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.EKS_REGION }}
 
-      # ✅ Extra Debugging Before Deployment
-      - name: Debug AWS IAM Role
+      - name: Debug AWS IAM Role (Ensure It Works Here Too)
         run: aws sts get-caller-identity
 
-      - name: Validate Kubernetes Authentication
-        run: kubectl auth can-i get pods --all-namespaces
-
-      - name: Check Kubernetes Cluster Info
-        run: kubectl cluster-info
-
-      - name: Check Kubernetes Nodes
-        run: kubectl get nodes
+      - name: Verify Kubernetes Access
+        run: |
+          echo "Checking EKS Authentication..."
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.EKS_REGION }}
+          kubectl get nodes || { echo "ERROR: Kubernetes authentication failed!"; exit 1; }
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -68,11 +88,15 @@ jobs:
 
       - name: Tag Docker Image
         run: |
+          echo "Tagging Docker image..."
           docker tag vit-torchscript:latest ${{ secrets.ECR_REPOSITORY }}:latest
+          echo "Docker image tagged successfully."
 
       - name: Push Docker Image to ECR
         run: |
+          echo "Pushing Docker image to ECR..."
           docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          echo "Docker image pushed to ECR successfully."
 
       - name: Deploy to EKS
         run: |
