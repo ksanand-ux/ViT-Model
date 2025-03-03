@@ -12,8 +12,11 @@ COPY . /app
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Explicitly Copy the Model File After Dependencies Are Installed
-COPY fine_tuned_vit_imagenet100_scripted.pt /app/
+# Install AWS CLI (Needed to Fetch Model from S3)
+RUN apt-get update && apt-get install -y awscli
+
+# Only Change: Download Model from S3 Instead of Copying It
+RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/
 
 # Verify Gunicorn Installation
 RUN which gunicorn && gunicorn --version
