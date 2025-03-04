@@ -7,16 +7,21 @@ WORKDIR /app
 # Copy Everything Except the Model First
 COPY . /app
 
-# Install Dependencies from requirements.txt
-# Single Layer Installation to Avoid Cache Issues
+# Install Dependencies (Single Layer to Reduce Build Time)
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    rm -rf /root/.cache/pip  # Free up space after installation
 
 # Install AWS CLI (Needed to Fetch Model from S3)
-RUN apt-get update && apt-get install -y awscli
+RUN apt-get update && apt-get install -y awscli && rm -rf /var/lib/apt/lists/*
 
-# Only Change: Download Model from S3 Instead of Copying It
-RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/
+# Ensure AWS Credentials Are Available (Prevent Silent S3 Failures)
+ENV AWS_REGION="us-east-1"
+ENV AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+ENV AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+
+# Download Model from S3
+RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/ || exit 1
 
 # Verify Gunicorn Installation
 RUN which gunicorn && gunicorn --version
@@ -24,5 +29,5 @@ RUN which gunicorn && gunicorn --version
 # Expose Port for FastAPI
 EXPOSE 8080
 
-# Start FastAPI App using Gunicorn with 1 Worker (For Testing CI/CD)
+# Start FastAPI App using Gunicorn
 CMD ["gunicorn", "fastapi_app:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--workers", "1"]
