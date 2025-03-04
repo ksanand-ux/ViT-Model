@@ -12,8 +12,13 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     rm -rf /root/.cache/pip  # Free up space after installation
 
-# Install AWS CLI (Needed to Fetch Model from S3)
-RUN apt-get update && apt-get install -y awscli && rm -rf /var/lib/apt/lists/*
+# Install AWS CLI & Set Timezone (Fixes Prompt Issue)
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y awscli tzdata && \
+    ln -fs /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
+    rm -rf /var/lib/apt/lists/*
 
 # Ensure AWS Credentials Are Available (Prevent Silent S3 Failures)
 ENV AWS_REGION="us-east-1"
