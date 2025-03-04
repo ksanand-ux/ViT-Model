@@ -12,21 +12,12 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     rm -rf /root/.cache/pip  # Free up space after installation
 
-# Install AWS CLI & Set Timezone (Fixes Prompt Issue)
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y awscli tzdata && \
-    ln -fs /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
-    rm -rf /var/lib/apt/lists/*
+# Install AWS CLI (Needed to Fetch Model from S3) - Without Prompt
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y awscli && rm -rf /var/lib/apt/lists/*
 
-# Ensure AWS Credentials Are Available (Prevent Silent S3 Failures)
-ENV AWS_REGION="us-east-1"
-ENV AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-ENV AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
-
-# Download Model from S3
-RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/ || exit 1
+# Reverted: Use IAM Role Instead of Setting Credentials
+RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/
 
 # Verify Gunicorn Installation
 RUN which gunicorn && gunicorn --version
