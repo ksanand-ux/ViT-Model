@@ -12,11 +12,18 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     rm -rf /root/.cache/pip  # Free up space after installation
 
-# Install AWS CLI (Needed to Fetch Model from S3) - Without Prompt
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y awscli && rm -rf /var/lib/apt/lists/*
+# Install AWS CLI (Needed to Fetch Model from S3)
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y awscli tzdata && \
+    ln -fs /usr/share/zoneinfo/Asia/Kolkata /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
+    rm -rf /var/lib/apt/lists/*
 
-# Reverted: Use IAM Role Instead of Setting Credentials
+# Remove Hardcoded AWS Credentials (Let AWS CLI Use EC2 IAM Role)
+RUN rm -f ~/.aws/credentials
+
+# Corrected Model Fetching (Allowing EC2 IAM Role to Handle S3 Access)
 RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/
 
 # Verify Gunicorn Installation
