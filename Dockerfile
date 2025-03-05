@@ -16,6 +16,17 @@ RUN pip install --upgrade pip && \
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y awscli && rm -rf /var/lib/apt/lists/*
 
-# FIX: Ensure Model is Available in the Container (Download at Startup)
-CMD aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/ && \
-    gunicorn fastapi_app:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080 --workers 1
+# Allow AWS CLI & SDK to Use EC2 IAM Role
+ENV AWS_EC2_METADATA_DISABLED=false
+
+# Download Model from S3 using IAM Role (NO Explicit Credentials Required)
+RUN aws s3 cp s3://e-see-vit-model/models/fine_tuned_vit_imagenet100_scripted.pt /app/
+
+# Verify Gunicorn Installation
+RUN which gunicorn && gunicorn --version
+
+# Expose Port for FastAPI
+EXPOSE 8080
+
+# Start FastAPI App using Gunicorn
+CMD ["gunicorn", "fastapi_app:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--workers", "1"]
