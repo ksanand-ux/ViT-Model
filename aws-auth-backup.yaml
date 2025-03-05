@@ -1,0 +1,15 @@
+apiVersion: v1
+data:
+  mapRoles: |
+    - groups:
+      - system:bootstrappers
+      - system:nodes
+      rolearn: arn:aws:iam::087735574692:role/eksctl-vit-cluster-nodegroup-vit-n-NodeInstanceRole-bBYLzjs4MnMh
+      username: system:node:{{EC2PrivateDNSName}}
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2025-02-19T06:51:26Z"
+  name: aws-auth
+  namespace: kube-system
+  resourceVersion: "1403"
+  uid: b0efd929-6174-479e-aeca-9ca2ee36d7ff
