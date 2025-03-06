@@ -1,0 +1,51 @@
+{
+    "Role": {
+        "Path": "/",
+        "RoleName": "eksctl-vit-cluster-addon-iamserviceaccount-de-Role1-oCiy3pu2AuF1",
+        "RoleId": "AROARI3LSUCSA4EKYCPGN",
+        "Arn": "arn:aws:iam::087735574692:role/eksctl-vit-cluster-addon-iamserviceaccount-de-Role1-oCiy3pu2AuF1",
+        "CreateDate": "2025-03-05T20:43:06+00:00",
+        "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Federated": "arn:aws:iam::087735574692:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/AB9265C10D96133DA4C5D0C5F978EAA8"
+                    },
+                    "Action": "sts:AssumeRoleWithWebIdentity",
+                    "Condition": {
+                        "StringEquals": {
+                            "oidc.eks.us-east-1.amazonaws.com/id/AB9265C10D96133DA4C5D0C5F978EAA8:aud": "sts.amazonaws.com",
+                            "oidc.eks.us-east-1.amazonaws.com/id/AB9265C10D96133DA4C5D0C5F978EAA8:sub": "system:serviceaccount:default:vit-api-sa"
+                        }
+                    }
+                }
+            ]
+        },
+        "Description": "",
+        "MaxSessionDuration": 3600,
+        "Tags": [
+            {
+                "Key": "alpha.eksctl.io/cluster-name",
+                "Value": "vit-cluster"
+            },
+            {
+                "Key": "alpha.eksctl.io/iamserviceaccount-name",
+                "Value": "default/vit-api-sa"
+            },
+            {
+                "Key": "alpha.eksctl.io/eksctl-version",
+                "Value": "0.204.0"
+            },
+            {
+                "Key": "eksctl.cluster.k8s.io/v1alpha1/cluster-name",
+                "Value": "vit-cluster"
+            }
+        ],
+        "RoleLastUsed": {
+            "LastUsedDate": "2025-03-06T10:14:56+00:00",
+            "Region": "us-east-1"
+        }
+    }
+}

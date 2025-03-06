@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::087735574692:role/eksctl-vit-cluster-addon-iamserviceaccount-de-Role1-oCiy3pu2AuF1
+  creationTimestamp: "2025-03-05T21:36:26Z"
+  name: vit-api-sa
+  namespace: default
+  resourceVersion: "3491994"
+  uid: a99e3a36-4bd9-4b46-a460-7a6b03287422
